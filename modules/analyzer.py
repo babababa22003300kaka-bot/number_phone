@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""محرك التحليل المُحسّن"""
+"""محرك التحليل المُحسّن (AsyncIO)"""
 
 import re
 import httpx
@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 class WebAnalyzer:
-    """محلل الصفحات الذكي"""
+    """محلل الصفحات الذكي (نسخة AsyncIO)"""
     
     def __init__(
         self, 
@@ -24,16 +24,17 @@ class WebAnalyzer:
         self.timeout = timeout
         self.max_size = max_size
         
-        # إعداد الـ client
-        self.client = httpx.Client(
+        # إعداد الـ AsyncClient
+        self.client = httpx.AsyncClient(
             timeout=timeout,
-            follow_redirects=True,  # مهم جداً!
-            limits=httpx.Limits(max_connections=100),
+            follow_redirects=True,
+            limits=httpx.Limits(max_connections=200, max_keepalive_connections=50),
             headers={
                 "User-Agent": user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9,ar;q=0.8"
-            }
+            },
+            verify=False  # تجاهل أخطاء SSL للسرعة
         )
     
     def detect_protection(self, response: httpx.Response, html: str) -> Tuple[bool, str]:
@@ -195,16 +196,51 @@ class WebAnalyzer:
         # ضعيف
         else:
             return (phone_score + verify_score) // 2
-    
-    def analyze(self, url: str) -> Optional[Dict]:
-        """التحليل الشامل"""
+
+    async def check_paths(self, base_url: str, paths: List[str]) -> List[Dict]:
+        """فحص المسارات الفرعية (Path Fuzzing)"""
+        found_paths = []
+        
+        for path in paths:
+            full_url = urljoin(base_url, path)
+            try:
+                # طباعة مسار الفحص (Verbose)
+                print(f"🔍 [PATH] Checking {full_url} ...", end="\r")
+                
+                response = await self.client.get(full_url)
+                
+                # لو الصفحة موجودة (200 OK)
+                if response.status_code == 200:
+                    html = response.text
+                    
+                    # تحليل سريع للصفحة الفرعية
+                    soup = BeautifulSoup(html, "lxml")
+                    inputs = self.analyze_inputs(soup)
+                    text = self.analyze_text(soup)
+                    
+                    # حساب السكور للصفحة الفرعية
+                    sub_score = inputs["phone_score"] + text["phone_score"] + inputs["verify_score"]
+                    
+                    if sub_score > 20:  # لو فيها أي ريحة phone/verify
+                        found_paths.append({
+                            "url": full_url,
+                            "score": sub_score,
+                            "title": soup.title.string.strip() if soup.title else "No Title"
+                        })
+            except:
+                continue
+                
+        return found_paths
+
+    async def analyze(self, url: str, scan_paths: List[str] = None) -> Optional[Dict]:
+        """التحليل الشامل (Async)"""
         try:
-            # الطلب
-            response = self.client.get(url)
+            # الطلب الرئيسي
+            response = await self.client.get(url)
             
             # التحقق من الحجم
             if len(response.content) > self.max_size:
-                return None
+                return {"url": url, "status": "oversize", "confidence": 0}
             
             html = response.text
             
@@ -218,7 +254,7 @@ class WebAnalyzer:
                     "confidence": 0
                 }
             
-            # التحليل
+            # التحليل الرئيسي
             soup = BeautifulSoup(html, "lxml")
             
             inputs = self.analyze_inputs(soup)
@@ -236,6 +272,16 @@ class WebAnalyzer:
             
             confidence = self.calculate_confidence(results)
             
+            # 🚀 Path Fuzzing (لو الموقع شغال أو طلبنا فحص المسارات)
+            valid_paths = []
+            if scan_paths and (confidence > 10 or response.status_code == 200):
+                valid_paths = await self.check_paths(url, scan_paths)
+                
+                # لو لقينا مسار تسجيل قوي، نعلي الثقة
+                if valid_paths:
+                    confidence = max(confidence, 80)
+                    results["phone_score"] = max(results["phone_score"], 80)
+            
             return {
                 "url": url,
                 "status": "analyzed",
@@ -246,7 +292,8 @@ class WebAnalyzer:
                 "evidence": {
                     "inputs": inputs["evidence"][:5],
                     "text": text["evidence"][:5],
-                    "api": api["endpoints"][:5]
+                    "api": api["endpoints"][:5],
+                    "paths": valid_paths  # المسارات المكتشفة
                 }
             }
         
@@ -257,6 +304,6 @@ class WebAnalyzer:
         except Exception as e:
             return {"url": url, "status": "error", "error": str(e), "confidence": 0}
     
-    def close(self):
+    async def close(self):
         """إغلاق الـ client"""
-        self.client.close()
+        await self.client.aclose()

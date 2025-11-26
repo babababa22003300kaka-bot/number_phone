@@ -1,13 +1,23 @@
 {
-  "threads": 20,
+  "threads": 5,
   "timeout": 10,
   "max_retries": 2,
   "max_response_size": 3145728,
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "telegram": {
     "bot_token": "7944401346:AAEMmeupR9hhEtcE8ZG6mURVo9A1AwFGBNM",
-    "chat_id": "1124247595"
+    "chat_id": "-4905861990",
+    "logo_url": "https://i.imgur.com/4Q5Q9Zq.png"
   },
+  "scan_paths": [
+    "/register",
+    "/signup",
+    "/login",
+    "/account",
+    "/auth",
+    "/users/sign_up",
+    "/join"
+  ],
   "confidence_threshold": 60,
   "use_hash_db": true,
   "hash_db_file": "checked_urls.db"

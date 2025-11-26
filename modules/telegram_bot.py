@@ -19,7 +19,7 @@ class TelegramNotifier:
             # تنسيق الرسالة
             message = self._format_message(result)
             
-            # الإرسال
+            # إرسال نص فقط
             await self.bot.send_message(
                 chat_id=self.chat_id,
                 text=message,
