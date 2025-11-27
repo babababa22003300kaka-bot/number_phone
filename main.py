@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 بوت البحث الآلي عن مصادر OTP
-الإصدار: 2.1 (AsyncIO + Verbose)
+الإصدار: 2.2 (Functional Generator + Strict DNS)
 """
 
 import asyncio
@@ -17,7 +17,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from modules.analyzer import WebAnalyzer
-from modules.generator import URLGenerator
+from modules.generator import generate_urls
 from modules.telegram_bot import TelegramNotifier
 from modules.database import HashDB
 
@@ -39,6 +39,9 @@ def load_file_lines(filepath: str) -> List[str]:
     """تحميل ملف نصي"""
     path = Path(filepath)
     if not path.exists():
+        # لو ملف الكلمات مش موجود، نرجع قائمة افتراضية
+        if "words" in filepath:
+            return ["cloud", "net", "app", "tech", "web", "data", "fast", "pro", "smart", "link"]
         print(f"⚠️ الملف {filepath} مش موجود!")
         return []
     
@@ -124,7 +127,7 @@ async def worker(queue: asyncio.Queue, analyzer: WebAnalyzer, hash_db: HashDB, t
 async def main_async():
     print("""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 بوت البحث الآلي - v2.1 (Turbo)
+🚀 بوت البحث الآلي - v2.2 (Functional)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """)
     
@@ -134,16 +137,16 @@ async def main_async():
     domains = load_file_lines("config/domains.txt")
     html_keywords = load_file_lines("config/html_keywords.txt")
     api_keywords = load_file_lines("config/api_keywords.txt")
+    words = load_file_lines("config/words.txt") # تحميل الكلمات
     
     if not domains:
         print("❌ لازم تضيف دومينات في domains.txt!")
         sys.exit(1)
     
-    print(f"✅ تم تحميل: {len(domains)} دومين | {len(html_keywords)} HTML KW | {len(api_keywords)} API KW")
+    print(f"✅ تم تحميل: {len(domains)} دومين | {len(html_keywords)} HTML KW | {len(api_keywords)} API KW | {len(words)} Words")
     print(f"⚡ السرعة: {config['threads']} Workers (AsyncIO)")
     
     # 2. الإعداد
-    generator = URLGenerator(domains)
     
     analyzer = WebAnalyzer(
         html_keywords=html_keywords,
@@ -182,7 +185,8 @@ async def main_async():
         while True:
             # لو الطابور فاضي شوية، نملاه
             if queue.qsize() < batch_size:
-                urls = generator.generate(batch_size)
+                # استخدام الدالة الجديدة generate_urls
+                urls = generate_urls(batch_size, domains, words)
                 for url in urls:
                     await queue.put(url)
             
