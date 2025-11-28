@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""محرك التحليل المُحسّن (AsyncIO)"""
+"""محرك التحليل المُحسّن (AsyncIO) - النسخة 2.3"""
 
 import re
 import httpx
@@ -15,12 +15,14 @@ class WebAnalyzer:
         self, 
         html_keywords: List[str],
         api_keywords: List[str],
+        exclude_keywords: List[str] = None,
         timeout: int = 10,
         max_size: int = 3145728,
         user_agent: str = None
     ):
         self.html_keywords = [k.lower() for k in html_keywords]
         self.api_keywords = [k.lower() for k in api_keywords]
+        self.exclude_keywords = [k.lower() for k in (exclude_keywords or [])]
         self.timeout = timeout
         self.max_size = max_size
         
@@ -36,6 +38,14 @@ class WebAnalyzer:
             },
             verify=False  # تجاهل أخطاء SSL للسرعة
         )
+    
+    def _check_exclusion(self, html: str) -> Tuple[bool, str]:
+        """فحص كلمات الاستبعاد في محتوى الصفحة"""
+        html_lower = html.lower()
+        for keyword in self.exclude_keywords:
+            if keyword in html_lower:
+                return True, keyword
+        return False, ""
     
     def detect_protection(self, response: httpx.Response, html: str) -> Tuple[bool, str]:
         """كشف Cloudflare/Captcha"""
@@ -173,7 +183,66 @@ class WebAnalyzer:
         
         return {
             "verify_score": min(verify_score, 100),
-            "endpoints": endpoints[:10]
+            "endpoints": endpoints[:10],
+            "script_text": script_text
+        }
+    
+    def _check_signatures(self, html: str, script_text: str) -> Dict:
+        """كشف بصمات مزودي خدمات OTP/SMS"""
+        signatures = {
+            "firebase": [
+                r'firebase\.initializeApp',
+                r'firebase\.auth\(\)',
+                r'signInWithPhoneNumber',
+                r'recaptcha-container'
+            ],
+            "twilio": [
+                r'Twilio\.Device',
+                r'Twilio\.Chat',
+                r'api\.twilio\.com'
+            ],
+            "msg91": [
+                r'msg91\.com',
+                r'msg91'
+            ],
+            "infobip": [
+                r'infobip',
+                r'api\.infobip'
+            ],
+            "nexmo": [
+                r'nexmo',
+                r'vonage',
+                r'api\.nexmo'
+            ],
+            "aws_sns": [
+                r'aws-sdk',
+                r'AWS\.SNS',
+                r'sns\.amazonaws'
+            ],
+            "plivo": [
+                r'plivo',
+                r'api\.plivo'
+            ],
+            "messagebird": [
+                r'messagebird',
+                r'rest\.messagebird'
+            ]
+        }
+        
+        found_signatures = []
+        score = 0
+        combined_text = html + " " + script_text
+        
+        for provider, patterns in signatures.items():
+            for pattern in patterns:
+                if re.search(pattern, combined_text, re.IGNORECASE):
+                    found_signatures.append(provider)
+                    score += 25
+                    break
+        
+        return {
+            "score": min(score, 50),
+            "signatures": found_signatures
         }
     
     def calculate_confidence(self, results: Dict) -> int:
@@ -244,6 +313,16 @@ class WebAnalyzer:
             
             html = response.text
             
+            # فحص الاستبعاد قبل أي تحليل
+            is_excluded, excluded_keyword = self._check_exclusion(html)
+            if is_excluded:
+                return {
+                    "url": url,
+                    "status": "excluded",
+                    "reason": excluded_keyword,
+                    "confidence": 0
+                }
+            
             # كشف الحماية
             is_protected, protection_type = self.detect_protection(response, html)
             if is_protected:
@@ -261,9 +340,12 @@ class WebAnalyzer:
             text = self.analyze_text(soup)
             api = self.analyze_api(soup, html)
             
-            # الدرجات
+            # كشف البصمات
+            signatures = self._check_signatures(html, api.get("script_text", ""))
+            
+            # الدرجات (مع إضافة نقاط البصمات)
             phone_score = inputs["phone_score"] + text["phone_score"]
-            verify_score = inputs["verify_score"] + text["verify_score"] + api["verify_score"]
+            verify_score = inputs["verify_score"] + text["verify_score"] + api["verify_score"] + signatures["score"]
             
             results = {
                 "phone_score": min(phone_score, 100),
@@ -293,7 +375,8 @@ class WebAnalyzer:
                     "inputs": inputs["evidence"][:5],
                     "text": text["evidence"][:5],
                     "api": api["endpoints"][:5],
-                    "paths": valid_paths  # المسارات المكتشفة
+                    "signatures": signatures["signatures"],
+                    "paths": valid_paths
                 }
             }
         

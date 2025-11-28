@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 بوت البحث الآلي عن مصادر OTP
-الإصدار: 2.2 (Functional Generator + Strict DNS)
+الإصدار: 2.3 (Phase 2: Smart Generation + Exclude Filter + Signature Detection)
 """
 
 import asyncio
@@ -90,11 +90,16 @@ async def worker(queue: asyncio.Queue, analyzer: WebAnalyzer, hash_db: HashDB, t
                 
                 if confidence >= threshold:
                     stats['found'] += 1
-                    print(f"✅ [FOUND] {url} (Conf: {confidence}%) - Phone: {result.get('phone_score')}% | Verify: {result.get('verify_score')}%")
+                    sigs = result.get("evidence", {}).get("signatures", [])
+                    sig_text = f" [Sigs: {','.join(sigs)}]" if sigs else ""
+                    print(f"✅ [FOUND] {url} (Conf: {confidence}%){sig_text} - Phone: {result.get('phone_score')}% | Verify: {result.get('verify_score')}%")
                     
                     # إرسال للتليجرام
                     if telegram:
                         await telegram.send_result(result)
+                
+                elif status == "excluded":
+                    print(f"🚫 [EXCL] {url} ({result.get('reason')})")
                 
                 elif status == "protected":
                     print(f"🛡️ [PROT] {url} ({result.get('protection')})")
@@ -127,7 +132,8 @@ async def worker(queue: asyncio.Queue, analyzer: WebAnalyzer, hash_db: HashDB, t
 async def main_async():
     print("""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 بوت البحث الآلي - v2.2 (Functional)
+🚀 بوت البحث الآلي - v2.3 (Phase 2)
+✨ Smart Generation + Exclude Filter + Signature Detection
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """)
     
@@ -137,13 +143,17 @@ async def main_async():
     domains = load_file_lines("config/domains.txt")
     html_keywords = load_file_lines("config/html_keywords.txt")
     api_keywords = load_file_lines("config/api_keywords.txt")
-    words = load_file_lines("config/words.txt") # تحميل الكلمات
+    exclude_keywords = load_file_lines("config/exclude.txt")
+    words = load_file_lines("config/words.txt")
+    names = load_file_lines("config/names.txt")
+    locations = load_file_lines("config/locations.txt")
     
     if not domains:
         print("❌ لازم تضيف دومينات في domains.txt!")
         sys.exit(1)
     
-    print(f"✅ تم تحميل: {len(domains)} دومين | {len(html_keywords)} HTML KW | {len(api_keywords)} API KW | {len(words)} Words")
+    print(f"✅ تم تحميل: {len(domains)} دومين | {len(html_keywords)} HTML KW | {len(api_keywords)} API KW")
+    print(f"✅ القوائم: {len(words)} كلمات | {len(names)} أسماء | {len(locations)} مواقع | {len(exclude_keywords)} استبعاد")
     print(f"⚡ السرعة: {config['threads']} Workers (AsyncIO)")
     
     # 2. الإعداد
@@ -151,6 +161,7 @@ async def main_async():
     analyzer = WebAnalyzer(
         html_keywords=html_keywords,
         api_keywords=api_keywords,
+        exclude_keywords=exclude_keywords,
         timeout=config['timeout'],
         max_size=config['max_response_size'],
         user_agent=config['user_agent']
@@ -185,8 +196,14 @@ async def main_async():
         while True:
             # لو الطابور فاضي شوية، نملاه
             if queue.qsize() < batch_size:
-                # استخدام الدالة الجديدة generate_urls
-                urls = generate_urls(batch_size, domains, words)
+                # استخدام الدالة الجديدة generate_urls مع الأسماء والمواقع
+                urls = generate_urls(
+                    count=batch_size,
+                    domains=domains,
+                    word_list=words,
+                    names=names,
+                    locations=locations
+                )
                 for url in urls:
                     await queue.put(url)
             
