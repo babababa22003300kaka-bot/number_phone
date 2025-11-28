@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""محرك التحليل المُحسّن (AsyncIO) - النسخة 2.3"""
+"""محرك التحليل المُحسّن (AsyncIO) - النسخة 2.4 (Phase 3)"""
 
 import re
 import httpx
@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 class WebAnalyzer:
-    """محلل الصفحات الذكي (نسخة AsyncIO)"""
+    """محلل الصفحات الذكي (نسخة AsyncIO + Browser Fallback)"""
     
     def __init__(
         self, 
@@ -18,13 +18,17 @@ class WebAnalyzer:
         exclude_keywords: List[str] = None,
         timeout: int = 10,
         max_size: int = 3145728,
-        user_agent: str = None
+        user_agent: str = None,
+        browser_service_url: str = None,
+        fallback_threshold: int = 20
     ):
         self.html_keywords = [k.lower() for k in html_keywords]
         self.api_keywords = [k.lower() for k in api_keywords]
         self.exclude_keywords = [k.lower() for k in (exclude_keywords or [])]
         self.timeout = timeout
         self.max_size = max_size
+        self.browser_service_url = browser_service_url
+        self.fallback_threshold = fallback_threshold
         
         # إعداد الـ AsyncClient
         self.client = httpx.AsyncClient(
@@ -67,14 +71,12 @@ class WebAnalyzer:
         evidence = []
         
         for inp in soup.find_all(["input", "textarea", "select"]):
-            # جمع الـ attributes
             attrs_text = " ".join([
                 str(inp.get(a, "")) 
                 for a in ["id", "name", "class", "placeholder", "type", 
                          "inputmode", "autocomplete", "aria-label"]
             ]).lower()
             
-            # Type=tel أو inputmode=tel
             if inp.get("type") == "tel" or inp.get("inputmode") == "tel":
                 phone_score += 30
                 evidence.append({
@@ -83,11 +85,9 @@ class WebAnalyzer:
                     "element": str(inp)[:200]
                 })
             
-            # Autocomplete
             if "tel" in inp.get("autocomplete", "").lower():
                 phone_score += 20
             
-            # HTML Keywords
             for kw in self.html_keywords:
                 if kw in attrs_text:
                     if kw in ["phone", "mobile", "tel"]:
@@ -100,7 +100,6 @@ class WebAnalyzer:
                         "element": str(inp)[:200]
                     })
             
-            # Pattern للـ phone
             pattern = inp.get("pattern", "")
             if pattern and re.search(r'[\d\+\-\(\)]{6,}', pattern):
                 phone_score += 10
@@ -108,7 +107,7 @@ class WebAnalyzer:
         return {
             "phone_score": min(phone_score, 100),
             "verify_score": min(verify_score, 100),
-            "evidence": evidence[:10]  # أول 10 فقط
+            "evidence": evidence[:10]
         }
     
     def analyze_text(self, soup: BeautifulSoup) -> Dict:
@@ -145,11 +144,9 @@ class WebAnalyzer:
         verify_score = 0
         endpoints = []
         
-        # استخراج الـ scripts
         scripts = soup.find_all("script")
         script_text = " ".join([s.get_text() for s in scripts if s.string])
         
-        # البحث عن URLs
         url_pattern = r'(?:https?://[^\s"\'\)<>]+|/api/[^\s"\'\)<>]+|/v\d+/[^\s"\'\)<>]+)'
         found_urls = re.findall(url_pattern, html + script_text)
         
@@ -165,7 +162,6 @@ class WebAnalyzer:
                     })
                     break
         
-        # البحث عن function names
         api_patterns = [
             r'(send(?:Otp|OTP|Sms|SMS|Code|Verification))',
             r'(verify(?:Otp|OTP|Code|Phone|SMS))',
@@ -250,19 +246,12 @@ class WebAnalyzer:
         phone_score = results["phone_score"]
         verify_score = results["verify_score"]
         
-        # لو في phone قوي + verify قوي
         if phone_score >= 40 and verify_score >= 40:
             return min(phone_score + verify_score, 100)
-        
-        # لو في phone قوي بس
         elif phone_score >= 50:
             return phone_score + (verify_score // 2)
-        
-        # لو في verify قوي بس
         elif verify_score >= 50:
             return verify_score + (phone_score // 2)
-        
-        # ضعيف
         else:
             return (phone_score + verify_score) // 2
 
@@ -273,24 +262,18 @@ class WebAnalyzer:
         for path in paths:
             full_url = urljoin(base_url, path)
             try:
-                # طباعة مسار الفحص (Verbose)
                 print(f"🔍 [PATH] Checking {full_url} ...", end="\r")
-                
                 response = await self.client.get(full_url)
                 
-                # لو الصفحة موجودة (200 OK)
                 if response.status_code == 200:
                     html = response.text
-                    
-                    # تحليل سريع للصفحة الفرعية
                     soup = BeautifulSoup(html, "lxml")
                     inputs = self.analyze_inputs(soup)
                     text = self.analyze_text(soup)
                     
-                    # حساب السكور للصفحة الفرعية
                     sub_score = inputs["phone_score"] + text["phone_score"] + inputs["verify_score"]
                     
-                    if sub_score > 20:  # لو فيها أي ريحة phone/verify
+                    if sub_score > 20:
                         found_paths.append({
                             "url": full_url,
                             "score": sub_score,
@@ -300,20 +283,39 @@ class WebAnalyzer:
                 continue
                 
         return found_paths
+    
+    async def _fallback_browser_check(self, url: str) -> Optional[str]:
+        """محاولة الفحص العميق باستخدام BaaS Server"""
+        if not self.browser_service_url:
+            return None
+        
+        try:
+            response = await self.client.post(
+                self.browser_service_url,
+                json={"url": url, "timeout": 30000},
+                timeout=35.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("html")
+        except Exception as e:
+            print(f"⚠️ [BaaS] Failed to render {url}: {str(e)}")
+        
+        return None
 
     async def analyze(self, url: str, scan_paths: List[str] = None) -> Optional[Dict]:
-        """التحليل الشامل (Async)"""
+        """التحليل الشامل (Async) مع Browser Fallback"""
         try:
-            # الطلب الرئيسي
+            # الطلب الرئيسي (HTTPX Fast)
             response = await self.client.get(url)
             
-            # التحقق من الحجم
             if len(response.content) > self.max_size:
                 return {"url": url, "status": "oversize", "confidence": 0}
             
             html = response.text
             
-            # فحص الاستبعاد قبل أي تحليل
+            # فحص الاستبعاد
             is_excluded, excluded_keyword = self._check_exclusion(html)
             if is_excluded:
                 return {
@@ -335,15 +337,11 @@ class WebAnalyzer:
             
             # التحليل الرئيسي
             soup = BeautifulSoup(html, "lxml")
-            
             inputs = self.analyze_inputs(soup)
             text = self.analyze_text(soup)
             api = self.analyze_api(soup, html)
-            
-            # كشف البصمات
             signatures = self._check_signatures(html, api.get("script_text", ""))
             
-            # الدرجات (مع إضافة نقاط البصمات)
             phone_score = inputs["phone_score"] + text["phone_score"]
             verify_score = inputs["verify_score"] + text["verify_score"] + api["verify_score"] + signatures["score"]
             
@@ -353,13 +351,38 @@ class WebAnalyzer:
             }
             
             confidence = self.calculate_confidence(results)
+            method = "httpx"
             
-            # 🚀 Path Fuzzing (لو الموقع شغال أو طلبنا فحص المسارات)
+            # 🔄 Browser Fallback (Phase 3)
+            if self.browser_service_url and confidence < self.fallback_threshold:
+                print(f"🔄 [RETRY] {url} with Browser (Conf: {confidence}% < {self.fallback_threshold}%)...")
+                full_html = await self._fallback_browser_check(url)
+                
+                if full_html:
+                    # إعادة التحليل بالـ HTML الجديد
+                    soup = BeautifulSoup(full_html, "lxml")
+                    inputs = self.analyze_inputs(soup)
+                    text = self.analyze_text(soup)
+                    api = self.analyze_api(soup, full_html)
+                    signatures = self._check_signatures(full_html, api.get("script_text", ""))
+                    
+                    phone_score = inputs["phone_score"] + text["phone_score"]
+                    verify_score = inputs["verify_score"] + text["verify_score"] + api["verify_score"] + signatures["score"]
+                    
+                    results = {
+                        "phone_score": min(phone_score, 100),
+                        "verify_score": min(verify_score, 100)
+                    }
+                    
+                    confidence = self.calculate_confidence(results)
+                    method = "playwright"
+                    print(f"✅ [BROWSER] New confidence: {confidence}%")
+            
+            # Path Fuzzing
             valid_paths = []
             if scan_paths and (confidence > 10 or response.status_code == 200):
                 valid_paths = await self.check_paths(url, scan_paths)
                 
-                # لو لقينا مسار تسجيل قوي، نعلي الثقة
                 if valid_paths:
                     confidence = max(confidence, 80)
                     results["phone_score"] = max(results["phone_score"], 80)
@@ -371,6 +394,7 @@ class WebAnalyzer:
                 "confidence": confidence,
                 "phone_score": results["phone_score"],
                 "verify_score": results["verify_score"],
+                "method": method,
                 "evidence": {
                     "inputs": inputs["evidence"][:5],
                     "text": text["evidence"][:5],

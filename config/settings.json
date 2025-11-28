@@ -18,6 +18,13 @@
     "/users/sign_up",
     "/join"
   ],
+  "hybrid_system": {
+    "enabled": false,
+    "browser_service_url": "http://127.0.0.1:5000/render",
+    "fallback_confidence_threshold": 20,
+    "browser_timeout": 30000,
+    "max_retries": 1
+  },
   "confidence_threshold": 60,
   "use_hash_db": true,
   "hash_db_file": "checked_urls.db"

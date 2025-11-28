@@ -141,42 +141,6 @@ async def main_async():
     print("📦 جاري تحميل الإعدادات...")
     config = load_config()
     domains = load_file_lines("config/domains.txt")
-    html_keywords = load_file_lines("config/html_keywords.txt")
-    api_keywords = load_file_lines("config/api_keywords.txt")
-    exclude_keywords = load_file_lines("config/exclude.txt")
-    words = load_file_lines("config/words.txt")
-    names = load_file_lines("config/names.txt")
-    locations = load_file_lines("config/locations.txt")
-    
-    if not domains:
-        print("❌ لازم تضيف دومينات في domains.txt!")
-        sys.exit(1)
-    
-    print(f"✅ تم تحميل: {len(domains)} دومين | {len(html_keywords)} HTML KW | {len(api_keywords)} API KW")
-    print(f"✅ القوائم: {len(words)} كلمات | {len(names)} أسماء | {len(locations)} مواقع | {len(exclude_keywords)} استبعاد")
-    print(f"⚡ السرعة: {config['threads']} Workers (AsyncIO)")
-    
-    # 2. الإعداد
-    
-    analyzer = WebAnalyzer(
-        html_keywords=html_keywords,
-        api_keywords=api_keywords,
-        exclude_keywords=exclude_keywords,
-        timeout=config['timeout'],
-        max_size=config['max_response_size'],
-        user_agent=config['user_agent']
-    )
-    
-    hash_db = None
-    if config.get('use_hash_db', True):
-        hash_db = HashDB(config.get('hash_db_file', 'checked_urls.db'))
-    
-    telegram = None
-    if config['telegram']['bot_token'] != "YOUR_BOT_TOKEN_HERE":
-        telegram = TelegramNotifier(
-            bot_token=config['telegram']['bot_token'],
-            chat_id=config['telegram']['chat_id']
-        )
         print("📡 التليجرام: متصل")
     
     # 3. تشغيل الـ Workers
