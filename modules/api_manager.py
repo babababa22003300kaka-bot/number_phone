@@ -271,3 +271,77 @@ def print_summary() -> None:
         print(f"{status} {service}: {info['count']} مفاتيح (Index: {info['current_index']})")
     
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# دوال التتبع (Usage Tracking)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def track_key_usage(service: str, email: str, db_path: str = "checked_urls.db"):
+    """
+    تسجيل استخدام مفتاح (دالة بسيطة)
+    
+    Args:
+        service: اسم الخدمة
+        email: البريد الإلكتروني
+        db_path: مسار قاعدة البيانات
+    """
+    try:
+        from modules.database import record_api_usage
+        record_api_usage(db_path, service, email)
+    except Exception as e:
+        print(f"⚠️ Error tracking usage: {e}")
+
+def check_usage_limit(service: str, email: str, limit: int, db_path: str = "checked_urls.db") -> Dict:
+    """
+    فحص الميزانية (دالة بسيطة)
+    
+    Args:
+        service: اسم الخدمة
+        email: البريد الإلكتروني
+        limit: الحد الأقصى
+        db_path: مسار قاعدة البيانات
+        
+    Returns:
+        dict: حالة الميزانية
+    """
+    try:
+        from modules.analytics import check_api_budget
+        return check_api_budget(db_path, service, email, limit)
+    except Exception as e:
+        print(f"⚠️ Error checking budget: {e}")
+        return {"used": 0, "limit": limit, "remaining": limit, "percentage": 0, "status": "ok"}
+
+def get_serpapi_key_with_tracking(db_path: str = "checked_urls.db", limit: int = 100) -> Optional[str]:
+    """
+    جلب مفتاح SerpAPI مع تتبع وفحص ميزانية
+    
+    Args:
+        db_path: مسار قاعدة البيانات
+        limit: الحد الأقصى
+        
+    Returns:
+        str: API key أو None
+    """
+    key_info = get_next_key('serpapi')
+    
+    if not key_info:
+        return None
+    
+    email = key_info.get('email', 'unknown')
+    
+    # فحص الميزانية
+    budget = check_usage_limit('serpapi', email, limit, db_path)
+    
+    if budget['status'] == 'critical':
+        print(f"🔴 [API] {email} exceeded 90% quota ({budget['used']}/{limit})")
+        # محاولة المفتاح التالي
+        return get_serpapi_key_with_tracking(db_path, limit)
+    
+    elif budget['status'] == 'warning':
+        print(f"🟡 [API] {email} at {budget['percentage']:.0f}% quota")
+    
+    # تسجيل الاستخدام
+    track_key_usage('serpapi', email, db_path)
+    
+    return key_info['api_key']
+
