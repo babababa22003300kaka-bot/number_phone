@@ -1,0 +1,61 @@
+# Google Dorks ل��بحث عن مواقع تسجيل OTP
+# كل سطر = استعلام بحث ذكي
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dorks أساسية (Basic)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+inurl:/signup "phone number"
+inurl:/register "mobile number"  
+intext:"verify your phone" site:.io
+intext:"OTP verification" site:.com
+"enter your mobile" inurl:auth
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dorks متقدمة (Advanced)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"enter mobile number" "send OTP" -site:github.com -site:stackoverflow.com
+"country code" "phone verification" inurl:signup
+intitle:"Create Account" "mobile" "verify"
+allintext:"register" "phone number" "verification code"
+"SMS code" "mobile verification" inurl:/auth
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dorks لخدمات محددة (Specific Services)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+site:.app "phone registration"
+site:.tech inurl:/auth/register
+site:.dev "mobile verification"
+"SMS verification" OR "phone OTP" inurl:signup
+inurl:/api/register "phone"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dorks لمنصات معينة (Platforms)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+intext:"Firebase Authentication" "phone"
+"Twilio Verify" site:.io
+intext:"AWS Cognito" "phone number"
+"Auth0" "phone verification"
+inurl:/api/v1/auth "mobile"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dorks ذكية (Smart Targeting)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"sign up" "phone number required" -site:youtube.com
+inurl:create-account "verify phone"
+"join now" "mobile number" inurl:register
+intitle:"Sign Up" "enter your phone"
+"get started" "phone verification" site:.io
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dorks للـ API Endpoints
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+inurl:/api/auth/register "phone"
+inurl:/v1/signup "mobile"
+inurl:/api/users/create "phoneNumber"
+site:.com inurl:/api "sendOTP"

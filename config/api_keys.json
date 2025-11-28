@@ -1,0 +1,24 @@
+{
+    "serpapi": [
+        {
+            "api_key": "YOUR_SERP_API_KEY_1",
+            "email": "user1@example.com",
+            "plan": "free",
+            "note": "100 searches/month"
+        },
+        {
+            "api_key": "YOUR_SERP_API_KEY_2",
+            "email": "user2@example.com",
+            "plan": "paid",
+            "note": "5000 searches/month"
+        }
+    ],
+    "google_search": [
+        {
+            "api_key": "YOUR_GOOGLE_API_KEY",
+            "cx": "YOUR_CUSTOM_SEARCH_ENGINE_ID",
+            "email": "user@example.com",
+            "note": "100 queries/day free"
+        }
+    ]
+}
