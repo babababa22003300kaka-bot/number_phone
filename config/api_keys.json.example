@@ -1,0 +1,24 @@
+{
+  "serpapi": [
+    {
+      "api_key": "SERP_API_KEY_1_FROM_ENV",
+      "email": "user1@example.com",
+      "plan": "free",
+      "note": "100 searches/month - Set SERP_API_KEY_1 in .env file"
+    },
+    {
+      "api_key": "SERP_API_KEY_2_FROM_ENV",
+      "email": "user2@example.com",
+      "plan": "paid",
+      "note": "5000 searches/month - Set SERP_API_KEY_2 in .env file"
+    }
+  ],
+  "google_search": [
+    {
+      "api_key": "GOOGLE_API_KEY_FROM_ENV",
+      "cx": "GOOGLE_SEARCH_CX_FROM_ENV",
+      "email": "user@example.com",
+      "note": "100 queries/day free - Set GOOGLE_API_KEY and GOOGLE_SEARCH_CX in .env file"
+    }
+  ]
+}

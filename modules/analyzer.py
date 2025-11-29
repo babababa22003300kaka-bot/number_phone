@@ -2,6 +2,7 @@
 """محرك التحليل المُحسّن (AsyncIO) - النسخة 2.4 (Phase 3)"""
 
 import re
+import gc
 import httpx
 from bs4 import BeautifulSoup
 from html import unescape
@@ -387,7 +388,8 @@ class WebAnalyzer:
                     confidence = max(confidence, 80)
                     results["phone_score"] = max(results["phone_score"], 80)
             
-            return {
+            # إنشاء النتيجة النهائية
+            result = {
                 "url": url,
                 "status": "analyzed",
                 "http_status": response.status_code,
@@ -403,12 +405,25 @@ class WebAnalyzer:
                     "paths": valid_paths
                 }
             }
+            
+            # ✅ تنظيف الذاكرة بعد المعالجة
+            del soup, html, response, inputs, text, api, signatures
+            if valid_paths:
+                del valid_paths
+            
+            # Force garbage collection
+            gc.collect()
+            
+            return result
         
         except httpx.TimeoutException:
+            gc.collect()  # تنظيف حتى في حالة الخطأ
             return {"url": url, "status": "timeout", "confidence": 0}
         except httpx.ConnectError:
+            gc.collect()
             return {"url": url, "status": "connection_error", "confidence": 0}
         except Exception as e:
+            gc.collect()
             return {"url": url, "status": "error", "error": str(e), "confidence": 0}
     
     async def close(self):

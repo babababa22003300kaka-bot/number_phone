@@ -8,93 +8,97 @@ Enhanced Database - Functional Style
 
 import hashlib
 import sqlite3
+import aiosqlite
 import json
 from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime
 
+# Global database pool
+_db_pool = None
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # دوال الإنشاء (Database Initialization)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def init_database(db_path: str = "checked_urls.db"):
+async def init_database(db_path: str = "checked_urls.db"):
     """
-    إنشاء قاعدة البيانات مع كل الجداول
+    إنشاء قاعدة البيانات مع كل الجداول (Async)
     
     Args:
         db_path: مسار قاعدة البيانات
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    global _db_pool
+    _db_pool = {'path': db_path}
     
-    # الجدول الرئيسي (محسّن)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS checked_urls (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT NOT NULL UNIQUE,
-            url_hash TEXT,
-            status TEXT NOT NULL,
-            confidence INTEGER DEFAULT 0,
-            method TEXT DEFAULT 'httpx',
-            phone_score INTEGER DEFAULT 0,
-            verify_score INTEGER DEFAULT 0,
-            signatures TEXT,
-            source TEXT DEFAULT 'generator',
-            checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # جدول أداء الـ Dorks
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dork_performance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            dork TEXT NOT NULL UNIQUE,
-            used_count INTEGER DEFAULT 0,
-            success_count INTEGER DEFAULT 0,
-            total_confidence INTEGER DEFAULT 0,
-            last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # جدول نتائج الفحص التفصيلية
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS scan_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT NOT NULL,
-            confidence INTEGER NOT NULL,
-            method TEXT NOT NULL,
-            source TEXT NOT NULL,
-            dork_used TEXT,
-            phone_score INTEGER,
-            verify_score INTEGER,
-            signatures TEXT,
-            evidence TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # جدول استخدام API
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS api_usage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            service TEXT NOT NULL,
-            api_key_email TEXT NOT NULL,
-            used_count INTEGER DEFAULT 0,
-            last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            reset_date DATE,
-            UNIQUE(service, api_key_email)
-        )
-    """)
-    
-    # Indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_url_hash ON checked_urls(url_hash)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_checked_at ON checked_urls(checked_at)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_source ON checked_urls(source)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dork ON dork_performance(dork)")
-    
-    conn.commit()
-    conn.close()
-    print("✅ Database initialized successfully")
+    async with aiosqlite.connect(db_path) as conn:
+        # الجدول الرئيسي (محسّن)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS checked_urls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL UNIQUE,
+                url_hash TEXT,
+                status TEXT NOT NULL,
+                confidence INTEGER DEFAULT 0,
+                method TEXT DEFAULT 'httpx',
+                phone_score INTEGER DEFAULT 0,
+                verify_score INTEGER DEFAULT 0,
+                signatures TEXT,
+                source TEXT DEFAULT 'generator',
+                checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # جدول أداء الـ Dorks
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS dork_performance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dork TEXT NOT NULL UNIQUE,
+                used_count INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                total_confidence INTEGER DEFAULT 0,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # جدول نتائج الفحص التفصيلية
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS scan_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                confidence INTEGER NOT NULL,
+                method TEXT NOT NULL,
+                source TEXT NOT NULL,
+                dork_used TEXT,
+                phone_score INTEGER,
+                verify_score INTEGER,
+                signatures TEXT,
+                evidence TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # جدول استخدام API
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS api_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL,
+                api_key_email TEXT NOT NULL,
+                used_count INTEGER DEFAULT 0,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reset_date DATE,
+                UNIQUE(service, api_key_email)
+            )
+        """)
+        
+        # Indexes
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_url_hash ON checked_urls(url_hash)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_checked_at ON checked_urls(checked_at)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_source ON checked_urls(source)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_dork ON dork_performance(dork)")
+        
+        await conn.commit()
+    print("✅ Database initialized successfully (Async)")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # دوال الـ Hash
@@ -104,24 +108,25 @@ def get_url_hash(url: str) -> str:
     """توليد hash للرابط"""
     return hashlib.md5(url.encode()).hexdigest()
 
-def is_url_checked(db_path: str, url: str) -> bool:
-    """تحقق لو الرابط اتفحص قبل كده"""
+async def is_url_checked(url: str) -> bool:
+    """تحقق لو الرابط اتفحص قبل كده (Async)"""
+    global _db_pool
+    db_path = _db_pool['path']
     url_hash = get_url_hash(url)
-    conn = sqlite3.connect(db_path)
-    cursor = conn.execute(
-        "SELECT 1 FROM checked_urls WHERE url_hash = ?",
-        (url_hash,)
-    )
-    result = cursor.fetchone() is not None
-    conn.close()
-    return result
+    
+    async with aiosqlite.connect(db_path) as conn:
+        async with conn.execute(
+            "SELECT 1 FROM checked_urls WHERE url_hash = ?",
+            (url_hash,)
+        ) as cursor:
+            result = await cursor.fetchone()
+            return result is not None
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # دوال التسجيل
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def mark_url_checked(
-    db_path: str,
+async def mark_url_checked(
     url: str,
     status: str = "checked",
     confidence: int = 0,
@@ -130,10 +135,9 @@ def mark_url_checked(
     **kwargs
 ):
     """
-    تسجيل الرابط كـ مفحوص (دالة محسّنة)
+    تسجيل الرابط كـ مفحوص (Async)
     
     Args:
-        db_path: مسار قاعدة البيانات
         url: الرابط
         status: الحالة
         confidence: درجة الثقة
@@ -141,32 +145,32 @@ def mark_url_checked(
         source: generator/dorking
         **kwargs: phone_score, verify_score, signatures
     """
+    global _db_pool
+    db_path = _db_pool['path']
     url_hash = get_url_hash(url)
-    
-    conn = sqlite3.connect(db_path)
     
     signatures = kwargs.get('signatures', [])
     if isinstance(signatures, list):
         signatures = json.dumps(signatures)
     
-    conn.execute("""
-        INSERT OR REPLACE INTO checked_urls 
-        (url, url_hash, status, confidence, method, phone_score, verify_score, signatures, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        url,
-        url_hash,
-        status,
-        confidence,
-        method,
-        kwargs.get('phone_score', 0),
-        kwargs.get('verify_score', 0),
-        signatures,
-        source
-    ))
-    
-    conn.commit()
-    conn.close()
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute("""
+            INSERT OR REPLACE INTO checked_urls 
+            (url, url_hash, status, confidence, method, phone_score, verify_score, signatures, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            url,
+            url_hash,
+            status,
+            confidence,
+            method,
+            kwargs.get('phone_score', 0),
+            kwargs.get('verify_score', 0),
+            signatures,
+            source
+        ))
+        
+        await conn.commit()
 
 def record_dork_usage(
     db_path: str,
@@ -344,20 +348,26 @@ def get_stats(db_path: str) -> dict:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class HashDB:
-    """Wrapper class للتوافق مع الكود القديم"""
+    """Async wrapper للتوافق مع الكود القديم"""
     
     def __init__(self, db_file: str = "checked_urls.db"):
         self.db_path = db_file
-        init_database(self.db_path)
+        self._initialized = False
+    
+    async def initialize(self):
+        """تهيئة async pool"""
+        if not self._initialized:
+            await init_database(self.db_path)
+            self._initialized = True
     
     def get_hash(self, url: str) -> str:
         return get_url_hash(url)
     
-    def is_checked(self, url: str) -> bool:
-        return is_url_checked(self.db_path, url)
+    async def is_checked(self, url: str) -> bool:
+        return await is_url_checked(url)
     
-    def mark_checked(self, url: str, status: str = "checked"):
-        mark_url_checked(self.db_path, url, status)
+    async def mark_checked(self, url: str, status: str = "checked", **kwargs):
+        await mark_url_checked(url, status, **kwargs)
     
-    def get_stats(self) -> dict:
-        return get_stats(self.db_path)
+    async def get_stats(self) -> dict:
+        return await get_stats()

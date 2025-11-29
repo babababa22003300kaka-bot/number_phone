@@ -8,7 +8,7 @@ Google Dorking Scanner - Functional Style
 """
 
 import random
-import requests
+import httpx
 from typing import List, Dict, Optional
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -52,14 +52,14 @@ def load_dorks(filepath: str) -> List[str]:
 # دوال البحث (SerpAPI)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def search_with_serpapi(
+async def search_with_serpapi(
     dork: str, 
     api_key: str, 
     num_results: int = 10,
     timeout: int = 10
 ) -> List[Dict]:
     """
-    بحث باستخدام SerpAPI
+    بحث باستخدام SerpAPI (Async)
     
     Args:
         dork: استعلام البحث (Google Dork)
@@ -71,7 +71,7 @@ def search_with_serpapi(
         list: قائمة النتائج، كل عنصر dict
         
     مثال:
-        >>> results = search_with_serpapi('site:.io "phone verification"', 'API_KEY')
+        >>> results = await search_with_serpapi('site:.io "phone verification"', 'API_KEY')
         >>> len(results)
         10
     """
@@ -85,26 +85,27 @@ def search_with_serpapi(
     }
     
     try:
-        response = requests.get(url, params=params, timeout=timeout)
-        
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get('organic_results', [])
-            return results
-        
-        elif response.status_code == 401:
-            print("❌ SerpAPI: Invalid API Key")
-            return []
-        
-        elif response.status_code == 429:
-            print("⚠️ SerpAPI: Rate limit exceeded")
-            return []
-        
-        else:
-            print(f"❌ SerpAPI Error: {response.status_code}")
-            return []
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, params=params)
             
-    except requests.Timeout:
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get('organic_results', [])
+                return results
+            
+            elif response.status_code == 401:
+                print("❌ SerpAPI: Invalid API Key")
+                return []
+            
+            elif response.status_code == 429:
+                print("⚠️ SerpAPI: Rate limit exceeded")
+                return []
+            
+            else:
+                print(f"❌ SerpAPI Error: {response.status_code}")
+                return []
+                
+    except httpx.TimeoutException:
         print(f"⏱️ SerpAPI Timeout after {timeout}s")
         return []
     except Exception as e:
@@ -153,14 +154,14 @@ def extract_urls_from_results(results: List[Dict]) -> List[str]:
 # الدالة الرئيسية
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def fetch_dork_urls(
+async def fetch_dork_urls(
     dorks: List[str],
     api_key: str,
     count: int = 20,
     num_results_per_dork: int = 10
 ) -> List[str]:
     """
-    جلب روابط باستخدام Google Dorking
+    جلب روابط باستخدام Google Dorking (Async)
     
     Args:
         dorks: قائمة استعلامات البحث
@@ -173,7 +174,7 @@ def fetch_dork_urls(
         
     مثال:
         >>> dorks = ["site:.io phone", "inurl:signup mobile"]
-        >>> urls = fetch_dork_urls(dorks, "API_KEY", count=20)
+        >>> urls = await fetch_dork_urls(dorks, "API_KEY", count=20)
         >>> len(urls) <= 20
         True
     """
@@ -192,8 +193,8 @@ def fetch_dork_urls(
     dork = random.choice(dorks)
     print(f"🔎 [DORK] Searching: {dork[:60]}...")
     
-    # ابحث
-    results = search_with_serpapi(
+    # ابحث (Async)
+    results = await search_with_serpapi(
         dork, 
         api_key, 
         num_results=num_results_per_dork
@@ -217,7 +218,7 @@ def fetch_dork_urls(
             dork2 = random.choice(remaining_dorks)
             print(f"🔎 [DORK] Additional search: {dork2[:60]}...")
             
-            results2 = search_with_serpapi(
+            results2 = await search_with_serpapi(
                 dork2,
                 api_key,
                 num_results=count - len(all_urls)
