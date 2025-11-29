@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 """
 بوت البحث الآلي عن مصادر OTP
-الإصدار: 2.6 (Phase 3: Clean Code + Centralized Config)
+الإصدار: 2.6 (Functional-Only - دوال بسيطة فقط)
 """
 
 import asyncio
 import sys
 import io
 
-from modules.analyzer import WebAnalyzer
-from modules.database import HashDB
-from modules.telegram_bot import TelegramNotifier
-from modules import dork_scanner
-from modules import generator
-from config.config_manager import get_config
+# Functional imports - دوال فقط!
+from config.config_loader import *
 from config.constants import *
-from modules.factory import create_analyzer, create_database, create_telegram_notifier
-from modules.utils import sanitize_url
-from typing import Dict, List, Optional
+from modules.helpers import *
+from modules import dork_scanner, generator
+from typing import Dict
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔧 تهيئة طباعة Unicode على Windows
@@ -31,11 +27,10 @@ if sys.platform == 'win32':
 # 🔧 الوظائف الأساسية (Async)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async def process_url(url: str, analyzer: WebAnalyzer, hash_db: HashDB, threshold: int, scan_paths: List[str]) -> Dict:
-    """فحص رابط واحد (Async with DB optimization)"""
+async def process_url(url, analyzer, hash_db, threshold, scan_paths):
+    """فحص رابط واحد - دالة بسيطة"""
     if hash_db:
-        is_duplicate = await hash_db.is_checked(url)
-        if is_duplicate:
+        if await hash_db.is_checked(url):
             return {"url": url, "status": "duplicate", "confidence": 0}
     
     result = await analyzer.analyze(url, scan_paths=scan_paths)
@@ -51,13 +46,11 @@ async def process_url(url: str, analyzer: WebAnalyzer, hash_db: HashDB, threshol
             signatures=result.get("evidence", {}).get("signatures", [])
         )
     
-    if result and result.get("confidence", 0) >= threshold:
-        return result
-    
     return result
 
-async def worker(queue: asyncio.Queue, analyzer: WebAnalyzer, hash_db: HashDB, threshold: int, telegram: TelegramNotifier, stats: Dict, scan_paths: List[str]):
-    """عامل (Worker) بيسحب روابط من الطابور ويفحصها"""
+
+async def worker(queue, analyzer, hash_db, threshold, telegram, stats, scan_paths):
+    """Worker - دالة بسيطة"""
     while True:
         url = await queue.get()
         try:
@@ -69,7 +62,6 @@ async def worker(queue: asyncio.Queue, analyzer: WebAnalyzer, hash_db: HashDB, t
             print(f"🔍 [CHECK] {clean_url} ...", end="\r")
             
             result = await process_url(clean_url, analyzer, hash_db, threshold, scan_paths)
-            
             stats['checked'] += 1
             
             if result:
@@ -113,20 +105,23 @@ async def worker(queue: asyncio.Queue, analyzer: WebAnalyzer, hash_db: HashDB, t
 async def main_async():
     print("""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 بوت البحث الآلي - v2.6 (Phase 3)
-✨ Clean Code + Centralized Config
+🚀 بوت البحث الآلي - v2.6
+✨ Functional-Only (دوال بسيطة فقط)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """)
     
-    # 1. تحميل الإعدادات (نظام مركزي!)
+    # 1. تحميل الإعدادات - دوال بسيطة!
     print("📦 جاري تحميل الإعدادات...")
-    config = get_config()
+    settings = load_json("config/settings.json")
     
-    # تحميل البيانات
-    domains = config.load_text_file(DOMAINS_FILE)
-    words = config.load_text_file(WORDS_FILE, DEFAULT_WORDS)
-    names = config.load_text_file(NAMES_FILE)
-    locations = config.load_text_file(LOCATIONS_FILE)
+    # تحميل الملفات
+    domains = load_text_lines(f"{CONFIG_DIR}/{DOMAINS_FILE}")
+    html_kw = load_text_lines(f"{CONFIG_DIR}/{HTML_KEYWORDS_FILE}")
+    api_kw = load_text_lines(f"{CONFIG_DIR}/{API_KEYWORDS_FILE}")
+    exclude = load_text_lines(f"{CONFIG_DIR}/{EXCLUDE_FILE}")
+    words = load_text_lines(f"{CONFIG_DIR}/{WORDS_FILE}", DEFAULT_WORDS)
+    names = load_text_lines(f"{CONFIG_DIR}/{NAMES_FILE}")
+    locations = load_text_lines(f"{CONFIG_DIR}/{LOCATIONS_FILE}")
     
     if not domains:
         print("❌ لازم تضيف دومينات في domains.txt!")
@@ -134,29 +129,58 @@ async def main_async():
     
     print(f"✅ تم تحميل: {len(domains)} دومين")
     print(f"✅ القوائم: {len(words)} كلمات | {len(names)} أسماء | {len(locations)} مواقع")
-    print(f"⚡ السرعة: {config.threads} Workers (AsyncIO)")
+    print(f"⚡ السرعة: {get_threads(settings)} Workers (AsyncIO)")
     
-    # 2. إنشاء الخدمات (Factory Pattern!)
-    analyzer = await create_analyzer(config)
-    hash_db = await create_database(config)
-    telegram = create_telegram_notifier(config)
+    # 2. إنشاء الخدمات - دوال بسيطة!
+    hybrid_config = get_setting(settings, 'hybrid_system', {})
+    
+    analyzer = await create_analyzer(
+        html_kw, api_kw, exclude,
+        get_timeout(settings),
+        get_max_response_size(settings),
+        get_user_agent(settings),
+        hybrid_config.get('browser_service_url') if hybrid_config.get('enabled') else None,
+        hybrid_config.get('fallback_confidence_threshold', FALLBACK_CONFIDENCE_THRESHOLD)
+    )
+    
+    hash_db = await create_database(
+        get_hash_db_file(settings),
+        use_hash_db(settings)
+    )
+    
+    # Telegram
+    telegram = None
+    telegram_config = get_telegram_config(settings)
+    if telegram_config:
+        telegram = create_telegram(
+            telegram_config['bot_token'],
+            telegram_config['chat_id']
+        )
+    else:
+        if get_setting(settings, 'telegram', {}).get('enabled'):
+            print("⚠️ التليجرام: معطل (تأكد من إعداد ملف .env)")
     
     # 3. تشغيل الـ Workers
     queue = asyncio.Queue()
     stats = {'checked': 0, 'found': 0}
+    scan_paths = get_scan_paths(settings)
     
     workers = [
-        asyncio.create_task(worker(queue, analyzer, hash_db, config.confidence_threshold, telegram, stats, config.scan_paths))
-        for _ in range(config.threads)
+        asyncio.create_task(
+            worker(queue, analyzer, hash_db, 
+                   get_confidence_threshold(settings), 
+                   telegram, stats, scan_paths)
+        )
+        for _ in range(get_threads(settings))
     ]
     
     # 4. إضافة المصادر
-    dorking_config = config.get('dorking', {})
+    dorking_config = get_setting(settings, 'dorking', {})
     if dorking_config.get('enabled'):
         print(f"🔍 تفعيل Google Dorking (Mode: {dorking_config.get('scanner_mode', 'hybrid')})")
         
-        dorks = config.load_text_file(DORKS_FILE)
-        api_key = config.get_serpapi_key()
+        dorks = load_text_lines(f"{CONFIG_DIR}/{DORKS_FILE}")
+        api_key = get_serpapi_key()
         
         if dorks and api_key:
             print(f"✅ تم تحميل {len(dorks)} Dorks")
@@ -214,6 +238,7 @@ async def main_async():
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """)
 
+
 def main():
     try:
         if sys.platform == 'win32':
@@ -221,6 +246,7 @@ def main():
         asyncio.run(main_async())
     except KeyboardInterrupt:
         pass
+
 
 if __name__ == "__main__":
     main()
