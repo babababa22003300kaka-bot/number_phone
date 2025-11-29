@@ -89,3 +89,54 @@ def sanitize_url(url: str) -> Optional[str]:
         return url
     except:
         return None
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Health Check
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def get_health_status(metrics_summary: dict = None) -> dict:
+    """
+    فحص صحة النظام - دالة بسيطة
+    
+    Args:
+        metrics_summary: ملخص المقاييس (optional)
+    
+    Returns:
+        Dict: حالة النظام
+    """
+    try:
+        import psutil
+        
+        # Memory check
+        memory = psutil.virtual_memory()
+        memory_ok = memory.percent < 90
+        
+        # Disk check
+        disk = psutil.disk_usage('/')
+        disk_ok = disk.percent < 90
+        
+        # Process count
+        try:
+            process_count = len(psutil.Process().children(recursive=True))
+        except:
+            process_count = 0
+        
+        health = {
+            'status': 'healthy' if (memory_ok and disk_ok) else 'warning',
+            'memory_percent': round(memory.percent, 2),
+            'disk_percent': round(disk.percent, 2),
+            'process_count': process_count
+        }
+        
+        if metrics_summary:
+            health['metrics'] = metrics_summary
+        
+        return health
+    
+    except ImportError:
+        # psutil not installed
+        return {
+            'status': 'unknown',
+            'message': 'psutil not installed'
+        }
