@@ -158,7 +158,8 @@ async def main_async():
         get_max_response_size(settings),
         get_user_agent(settings),
         hybrid_config.get('browser_service_url') if hybrid_config.get('enabled') else None,
-        hybrid_config.get('fallback_confidence_threshold', FALLBACK_CONFIDENCE_THRESHOLD)
+        hybrid_config.get('fallback_confidence_threshold', FALLBACK_CONFIDENCE_THRESHOLD),
+        settings  # إضافة proxy_config
     )
     
     hash_db = await create_database(

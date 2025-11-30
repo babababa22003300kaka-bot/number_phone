@@ -421,9 +421,9 @@ async def run_registration_scenario(
         "otp_detected": None
     }
     
-    # تحميل البروكسي (لو موجود)
+    # تحميل البروكسي (لو موجود ومفعل للـ Playwright)
     proxy_dict = None
-    if proxy_config:
+    if proxy_config and proxy_config.get('proxy', {}).get('use_in_playwright', True):
         from modules.proxy_manager import get_proxy_list, choose_proxy, build_playwright_proxy_dict, mask_proxy_url
         proxy_list = get_proxy_list(proxy_config)
         proxy_url = choose_proxy(

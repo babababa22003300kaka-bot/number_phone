@@ -32,8 +32,8 @@ class WebAnalyzer:
         self.browser_service_url = browser_service_url
         self.fallback_threshold = fallback_threshold
         
-        # تحميل البروكسيات (if proxy support configured)
-        if proxy_config:
+        # تحميل البروكسيات (if proxy support configured AND enabled for httpx)
+        if proxy_config and proxy_config.get('proxy', {}).get('use_in_httpx', True):
             from modules.proxy_manager import get_proxy_list, choose_proxy, mask_proxy_url
             self.proxy_list = get_proxy_list(proxy_config)
             self.proxy_config = proxy_config
@@ -211,7 +211,7 @@ class WebAnalyzer:
                 r'firebase\.initializeApp',
                 r'firebase\.auth\(\)',
                 r'signInWithPhoneNumber',
-                r're captcha-container'
+                r'recaptcha-container'
             ],
             "twilio": [
                 r'Twilio\.Device',
