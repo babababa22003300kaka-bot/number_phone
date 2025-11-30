@@ -380,7 +380,8 @@ async def run_registration_scenario(
     phone_number: Optional[str] = None,
     headless: bool = False,
     timeout: int = 30000,
-    screenshot_dir: str = "screenshots"
+    screenshot_dir: str = "screenshots",
+    proxy_config: Optional[Dict] = None
 ) -> Dict:
     """
     تنفيذ سيناريو تسجيل كامل (الدالة الرئيسية)
@@ -391,6 +392,7 @@ async def run_registration_scenario(
         headless: تشغيل بدون واجهة
         timeout: timeout عام بالمللي ثانية
         screenshot_dir: مجلد Screenshots
+        proxy_config: إعدادات البروكسي (Optional)
         
     Returns:
         dict: تقرير مفصل عن النتائج
@@ -419,6 +421,19 @@ async def run_registration_scenario(
         "otp_detected": None
     }
     
+    # تحميل البروكسي (لو موجود)
+    proxy_dict = None
+    if proxy_config:
+        from modules.proxy_manager import get_proxy_list, choose_proxy, build_playwright_proxy_dict, mask_proxy_url
+        proxy_list = get_proxy_list(proxy_config)
+        proxy_url = choose_proxy(
+            proxy_list,
+            rotate=proxy_config.get('proxy', {}).get('rotate', True)
+        )
+        if proxy_url:
+            proxy_dict = build_playwright_proxy_dict(proxy_url)
+            print(f"🌐 Proxy enabled for Playwright: {mask_proxy_url(proxy_url)}")
+    
     browser = None
     
     try:
@@ -433,10 +448,22 @@ async def run_registration_scenario(
                 args=['--disable-blink-features=AutomationControlled']
             )
             
-            context = await browser.new_context(
-                viewport={'width': 1280, 'height': 720},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            )
+            # إعداد context options
+            context_options = {
+                'viewport': {'width': 1280, 'height': 720},
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            # إضافة البروكسي لو موجود
+            if proxy_dict:
+                context_options['proxy'] = proxy_dict
+            
+            context = await browser.new_context(**context_options)
+            
+            # تأكيد استخدام البروكسي (لو مفعل)
+            if proxy_dict:
+                proxy_server = proxy_dict.get('server', 'Unknown')
+                print(f"🤖 AUTOMATOR: Playwright is using proxy: {proxy_server}")
             
             page = await context.new_page()
             page.set_default_timeout(timeout)

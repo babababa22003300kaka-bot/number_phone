@@ -59,6 +59,10 @@ class WebAnalyzer:
             },
             verify=False  # تجاهل أخطاء SSL للسرعة
         )
+        
+        # تأكيد استخدام البروكسي (لو مفعل)
+        if self.proxy_url:
+            print(f"🔍 ANALYZER: Using proxy for HTTP requests: {mask_proxy_url(self.proxy_url)}")
     
     def _check_exclusion(self, html: str) -> Tuple[bool, str]:
         """فحص كلمات الاستبعاد في محتوى الصفحة"""
@@ -207,7 +211,7 @@ class WebAnalyzer:
                 r'firebase\.initializeApp',
                 r'firebase\.auth\(\)',
                 r'signInWithPhoneNumber',
-                r'recaptcha-container'
+                r're captcha-container'
             ],
             "twilio": [
                 r'Twilio\.Device',
