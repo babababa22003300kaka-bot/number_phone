@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 بوت البحث الآلي عن مصادر OTP
-الإصدار: 2.6 (Functional-Only - دوال بسيطة فقط)
+الإصدار: 2.7 (With Logging + Metrics)
 """
 
 import asyncio
@@ -14,6 +14,10 @@ from config.constants import *
 from modules.helpers import *
 from modules import dork_scanner, generator
 from typing import Dict
+
+# Phase 4: Monitoring - Step 1 & 2
+from modules.logger import setup_logger, log_info, log_success, log_error
+from modules.metrics import start_metrics, track_url_checked, track_url_found, print_metrics_report
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔧 تهيئة طباعة Unicode على Windows
@@ -64,12 +68,19 @@ async def worker(queue, analyzer, hash_db, threshold, telegram, stats, scan_path
             result = await process_url(clean_url, analyzer, hash_db, threshold, scan_paths)
             stats['checked'] += 1
             
+            # Step 2: Track metrics
+            track_url_checked()
+            
             if result:
                 confidence = result.get("confidence", 0)
                 status = result.get("status", "unknown")
                 
                 if confidence >= threshold:
                     stats['found'] += 1
+                    
+                    # Step 2: Track found
+                    track_url_found()
+                    
                     sigs = result.get("evidence", {}).get("signatures", [])
                     sig_text = f" [Sigs: {','.join(sigs)}]" if sigs else ""
                     print(f"✅ [FOUND] {url} (Conf: {confidence}%){sig_text} - Phone: {result.get('phone_score')}% | Verify: {result.get('verify_score')}%")
@@ -105,10 +116,17 @@ async def worker(queue, analyzer, hash_db, threshold, telegram, stats, scan_path
 async def main_async():
     print("""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 بوت البحث الآلي - v2.6
-✨ Functional-Only (دوال بسيطة فقط)
+🚀 بوت البحث الآلي - v2.7
+✨ With Logging + Metrics
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """)
+    
+    # Step 1: Basic Logging
+    logger = setup_logger(level="INFO", console=False)
+    log_info(logger, "Bot started - v2.7 with logging and metrics")
+    
+    # Step 2: Start Metrics
+    start_metrics()
     
     # 1. تحميل الإعدادات - دوال بسيطة!
     print("📦 جاري تحميل الإعدادات...")
@@ -228,6 +246,10 @@ async def main_async():
         print("\n⏸️ توقف يدوي...")
     finally:
         await analyzer.close()
+        
+        # Logging & Metrics
+        log_success(logger, f"Scan completed: {stats['checked']} checked, {stats['found']} found")
+        print_metrics_report(logger)
         
         print(f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
