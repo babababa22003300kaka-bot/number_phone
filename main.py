@@ -19,17 +19,13 @@ from typing import Dict
 from modules.logger import setup_logger, log_info, log_success, log_error
 from modules.metrics import start_metrics, track_url_checked, track_url_found, print_metrics_report
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔧 تهيئة طباعة Unicode على Windows
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔧 الوظائف الأساسية (Async)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def process_url(url, analyzer, hash_db, threshold, scan_paths):
     """فحص رابط واحد - دالة بسيطة"""
@@ -109,28 +105,29 @@ async def worker(queue, analyzer, hash_db, threshold, telegram, stats, scan_path
         finally:
             queue.task_done()
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🚀 البرنامج الرئيسي
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def main_async():
     print("""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+========================================
 🚀 بوت البحث الآلي - v2.7
 ✨ With Logging + Metrics
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+========================================
     """)
-    
-    # Step 1: Basic Logging
-    logger = setup_logger(level="INFO", console=False)
-    log_info(logger, "Bot started - v2.7 with logging and metrics")
-    
-    # Step 2: Start Metrics
-    start_metrics()
     
     # 1. تحميل الإعدادات - دوال بسيطة!
     print("📦 جاري تحميل الإعدادات...")
     settings = load_json("config/settings.json")
+    
+    # Step 1: Basic Logging (اختياري - طباعة في الترمنال)
+    logging_config = get_setting(settings, 'logging', {})
+    logger = None
+    if logging_config.get('enabled', False):
+        logger = setup_logger(level="INFO", console=True)
+        log_info(logger, "Bot started - v2.7 with logging and metrics")
+    
+    # Step 2: Start Metrics
+    start_metrics()
     
     # تحميل الملفات
     domains = load_text_lines(f"{CONFIG_DIR}/{DOMAINS_FILE}")
@@ -249,16 +246,17 @@ async def main_async():
         await analyzer.close()
         
         # Logging & Metrics
-        log_success(logger, f"Scan completed: {stats['checked']} checked, {stats['found']} found")
+        if logger:
+            log_success(logger, f"Scan completed: {stats['checked']} checked, {stats['found']} found")
         print_metrics_report(logger)
         
         print(f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+========================================
 📊 الإحصائيات النهائية
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+========================================
 • تم فحص: {stats['checked']} موقع
 • مواقع محتملة: {stats['found']}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+========================================
         """)
 
 

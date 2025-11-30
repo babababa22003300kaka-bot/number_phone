@@ -42,6 +42,9 @@
     "use_in_playwright": false,
     "retry_without_proxy_on_error": true
   },
+  "logging": {
+    "enabled": false
+  },
   "name_generation": {
     "library": "names",
     "locale": "en",
