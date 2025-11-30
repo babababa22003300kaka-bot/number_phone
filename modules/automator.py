@@ -12,21 +12,105 @@ from typing import Dict, List, Optional, Tuple
 import random
 import re
 from datetime import datetime
+import names
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # دوال توليد البيانات الوهمية
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def generate_fake_name() -> str:
+def _sanitize_username(name: str, config: Dict) -> str:
     """
-    توليد اسم وهمي
+    تنظيف وتطبيع اسم المستخدم - دالة مساعدة
+    
+    Args:
+        name: الاسم الأصلي
+        config: dict with 'separator', 'username_regex'
     
     Returns:
-        str: اسم وهمي
+        str: اسم منظف ومطابق للقواعد
     """
-    first_names = ['ahmed', 'mohamed', 'sara', 'fatima', 'ali', 'omar', 'layla', 'youssef']
-    last_names = ['hassan', 'ibrahim', 'mahmoud', 'salem', 'rashid', 'khalil']
-    return f"{random.choice(first_names)}_{random.choice(last_names)}{random.randint(10,99)}"
+    separator = config.get('separator', '_')
+    username_regex = config.get('username_regex', '^[a-z0-9._]+$')
+    
+    # Convert to lowercase
+    name = name.lower()
+    
+    # Replace spaces with separator
+    name = name.replace(' ', separator)
+    
+    # Remove invalid characters (keep only a-z, 0-9, ., _)
+    name = re.sub(r'[^a-z0-9._]', '', name)
+    
+    return name
+
+
+def generate_fake_name(config: Optional[Dict] = None) -> str:
+    """
+    توليد اسم مستخدم وهمي - config-driven
+    
+    Args:
+        config: dict with keys:
+            - library: "names" | "faker" (default: "names")
+            - locale: "en" | "ar" (default: "en")
+            - separator: "_" | "." (default: "_")
+            - username_regex: regex pattern (default: "^[a-z0-9._]+$")
+            - fallback_first_names: list
+            - fallback_last_names: list
+    
+    Returns:
+        str: sanitized username (format: firstname_lastname##)
+    """
+    # Default config if none provided
+    if config is None:
+        config = {
+            'library': 'names',
+            'locale': 'en',
+            'separator': '_',
+            'username_regex': '^[a-z0-9._]+$',
+            'fallback_first_names': ['ahmed', 'mohamed', 'sara', 'fatima', 'ali', 'omar'],
+            'fallback_last_names': ['hassan', 'ibrahim', 'mahmoud', 'salem', 'rashid']
+        }
+    
+    library = config.get('library', 'names')
+    locale = config.get('locale', 'en')
+    
+    # Generate names using library
+    try:
+        if library == 'names':
+            # names library doesn't support locale, use fallback for non-en
+            if locale != 'en':
+                first = random.choice(config.get('fallback_first_names', ['user']))
+                last = random.choice(config.get('fallback_last_names', ['name']))
+            else:
+                first = names.get_first_name()
+                last = names.get_last_name()
+        elif library == 'faker':
+            # faker support (future enhancement)
+            try:
+                from faker import Faker
+                fake = Faker(locale)
+                full_name = fake.name()
+                parts = full_name.split()
+                first, last = parts[0], parts[-1]
+            except ImportError:
+                # Fallback if faker not installed
+                first = random.choice(config.get('fallback_first_names', ['user']))
+                last = random.choice(config.get('fallback_last_names', ['name']))
+        else:
+            # Unknown library, use fallback
+            first = random.choice(config.get('fallback_first_names', ['user']))
+            last = random.choice(config.get('fallback_last_names', ['name']))
+    except Exception:
+        # Any error, use fallback
+        first = random.choice(config.get('fallback_first_names', ['user']))
+        last = random.choice(config.get('fallback_last_names', ['name']))
+    
+    # Add numeric suffix
+    num = random.randint(10, 99)
+    raw_name = f"{first}_{last}{num}"
+    
+    # Sanitize and return
+    return _sanitize_username(raw_name, config)
 
 def generate_fake_email() -> str:
     """
@@ -312,6 +396,8 @@ async def run_registration_scenario(
         dict: تقرير مفصل عن النتائج
     """
     # توليد بيانات
+    # Load name generation config from settings (if available)
+    # For now, use None to get defaults - will be enhanced to load from settings.json
     fake_name = generate_fake_name()
     fake_email = generate_fake_email()
     fake_password = generate_fake_password()

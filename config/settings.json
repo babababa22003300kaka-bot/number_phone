@@ -33,5 +33,30 @@
   },
   "confidence_threshold": 60,
   "use_hash_db": true,
-  "hash_db_file": "checked_urls.db"
+  "hash_db_file": "checked_urls.db",
+  "name_generation": {
+    "library": "names",
+    "locale": "en",
+    "separator": "_",
+    "username_regex": "^[a-z0-9._]+$",
+    "ensure_unique": false,
+    "fallback_first_names": [
+      "ahmed",
+      "mohamed",
+      "sara",
+      "fatima",
+      "ali",
+      "omar",
+      "layla",
+      "youssef"
+    ],
+    "fallback_last_names": [
+      "hassan",
+      "ibrahim",
+      "mahmoud",
+      "salem",
+      "rashid",
+      "khalil"
+    ]
+  }
 }
