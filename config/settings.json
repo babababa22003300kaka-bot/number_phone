@@ -34,6 +34,12 @@
   "confidence_threshold": 60,
   "use_hash_db": true,
   "hash_db_file": "checked_urls.db",
+  "proxy": {
+    "enabled": true,
+    "list_file": "config/proxies.txt",
+    "rotate": true,
+    "retry_without_proxy_on_error": true
+  },
   "name_generation": {
     "library": "names",
     "locale": "en",

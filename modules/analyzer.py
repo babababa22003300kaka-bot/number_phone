@@ -21,7 +21,8 @@ class WebAnalyzer:
         max_size: int = 3145728,
         user_agent: str = None,
         browser_service_url: str = None,
-        fallback_threshold: int = 20
+        fallback_threshold: int = 20,
+        proxy_config: Optional[Dict] = None
     ):
         self.html_keywords = [k.lower() for k in html_keywords]
         self.api_keywords = [k.lower() for k in api_keywords]
@@ -30,6 +31,21 @@ class WebAnalyzer:
         self.max_size = max_size
         self.browser_service_url = browser_service_url
         self.fallback_threshold = fallback_threshold
+        
+        # تحميل البروكسيات (if proxy support configured)
+        if proxy_config:
+            from modules.proxy_manager import get_proxy_list, choose_proxy, mask_proxy_url
+            self.proxy_list = get_proxy_list(proxy_config)
+            self.proxy_config = proxy_config
+            proxy_url = choose_proxy(
+                self.proxy_list,
+                rotate=proxy_config.get('proxy', {}).get('rotate', True)
+            )
+            self.proxy_url = proxy_url
+            if proxy_url:
+                print(f"🌐 Proxy enabled: {mask_proxy_url(proxy_url)}")
+        else:
+            self.proxy_url = None
         
         # إعداد الـ AsyncClient
         self.client = httpx.AsyncClient(
@@ -264,7 +280,11 @@ class WebAnalyzer:
             full_url = urljoin(base_url, path)
             try:
                 print(f"🔍 [PATH] Checking {full_url} ...", end="\r")
-                response = await self.client.get(full_url)
+                # Use proxy if available
+                if self.proxy_url:
+                    response = await self.client.get(full_url, proxy=self.proxy_url)
+                else:
+                    response = await self.client.get(full_url)
                 
                 if response.status_code == 200:
                     html = response.text
@@ -291,11 +311,20 @@ class WebAnalyzer:
             return None
         
         try:
-            response = await self.client.post(
-                self.browser_service_url,
-                json={"url": url, "timeout": 30000},
-                timeout=35.0
-            )
+            # Use proxy if available
+            if self.proxy_url:
+                response = await self.client.post(
+                    self.browser_service_url,
+                    json={"url": url, "timeout": 30000},
+                    timeout=35.0,
+                    proxy=self.proxy_url
+                )
+            else:
+                response = await self.client.post(
+                    self.browser_service_url,
+                    json={"url": url, "timeout": 30000},
+                    timeout=35.0
+                )
             
             if response.status_code == 200:
                 data = response.json()
@@ -308,8 +337,11 @@ class WebAnalyzer:
     async def analyze(self, url: str, scan_paths: List[str] = None) -> Optional[Dict]:
         """التحليل الشامل (Async) مع Browser Fallback"""
         try:
-            # الطلب الرئيسي (HTTPX Fast)
-            response = await self.client.get(url)
+            # الطلب الرئيسي (HTTPX Fast) with proxy support
+            if self.proxy_url:
+                response = await self.client.get(url, proxy=self.proxy_url)
+            else:
+                response = await self.client.get(url)
             
             if len(response.content) > self.max_size:
                 return {"url": url, "status": "oversize", "confidence": 0}

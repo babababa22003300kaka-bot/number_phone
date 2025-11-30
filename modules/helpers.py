@@ -22,7 +22,8 @@ async def create_analyzer(
     max_size: int,
     user_agent: str,
     browser_url: Optional[str] = None,
-    fallback_threshold: int = 20
+    fallback_threshold: int = 20,
+    proxy_config: Optional[Dict] = None
 ) -> WebAnalyzer:
     """إنشاء WebAnalyzer - دالة بسيطة"""
     return WebAnalyzer(
@@ -33,7 +34,8 @@ async def create_analyzer(
         max_size=max_size,
         user_agent=user_agent,
         browser_service_url=browser_url,
-        fallback_threshold=fallback_threshold
+        fallback_threshold=fallback_threshold,
+        proxy_config=proxy_config
     )
 
 
