@@ -40,6 +40,8 @@
   "execution": {
     "mode": "auto",
     "http_first": true,
+    "continuous_mode": true,
+    "continuous_wait_seconds": 1,
     "run_automator_on_found": true,
     "browser": {
       "headless": true,

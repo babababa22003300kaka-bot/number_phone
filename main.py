@@ -145,12 +145,22 @@ async def main_async():
     execution_mode = get_execution_mode(settings)
     print_execution_mode_banner(execution_mode, settings)
     
+    # 🔄 Continuous Mode Configuration
+    execution_config = get_setting(settings, 'execution', {})
+    continuous_mode = execution_config.get('continuous_mode', False)
+    wait_seconds = execution_config.get('continuous_wait_seconds', 60)
+    
+    if continuous_mode:
+        print("\n🔄 وضع التشغيل المستمر: مفعّل")
+        print(f"   هيعيد التشغيل تلقائياً كل {wait_seconds} ثانية")
+        print("   اضغط Ctrl+C للإيقاف")
+    
     # 🌐 Proxy Health Check (if enabled)
     proxy_config = settings.get('proxy', {})
     health_config = get_proxy_health_config(settings)
     
     if proxy_config.get('enabled') and health_config.get('enabled'):
-        print("\n🔍 Proxy Health Check...")
+        print("\n🔍 فحص صحة البروكسيات...")
         from modules.proxy_manager import get_proxy_list
         
         proxy_list = get_proxy_list(settings)
@@ -164,9 +174,9 @@ async def main_async():
             healthy_proxies = filter_healthy_proxies(results)
             
             if len(healthy_proxies) < len(proxy_list):
-                print(f"⚠️  {len(proxy_list) - len(healthy_proxies)} proxies failed health check")
+                print(f"⚠️  {len(proxy_list) - len(healthy_proxies)} بروكسيات فشلت في الفحص")
         else:
-            print("⚠️  No proxies found in proxy list")
+            print("⚠️  مفيش بروكسيات في القائمة")
     
     # تحميل الملفات
     domains = load_text_lines(f"{CONFIG_DIR}/{DOMAINS_FILE}")
@@ -185,118 +195,146 @@ async def main_async():
     print(f"✅ القوائم: {len(words)} كلمات | {len(names)} أسماء | {len(locations)} مواقع")
     print(f"⚡ السرعة: {get_threads(settings)} Workers (AsyncIO)\n")
     
-    # 2. إنشاء الخدمات - دوال بسيطة!
-    hybrid_config = get_setting(settings, 'hybrid_system', {})
+    # 🔄 حلقة التشغيل المستمر
+    run_count = 0
     
-    analyzer = await create_analyzer(
-        html_kw, api_kw, exclude,
-        get_timeout(settings),
-        get_max_response_size(settings),
-        get_user_agent(settings),
-        hybrid_config.get('browser_service_url') if hybrid_config.get('enabled') else None,
-        hybrid_config.get('fallback_confidence_threshold', FALLBACK_CONFIDENCE_THRESHOLD),
-        settings  # إضافة proxy_config
-    )
-    
-    hash_db = await create_database(
-        get_hash_db_file(settings),
-        use_hash_db(settings)
-    )
-    
-    # Telegram
-    telegram = None
-    telegram_config = get_telegram_config(settings)
-    if telegram_config:
-        telegram = create_telegram(
-            telegram_config['bot_token'],
-            telegram_config['chat_id']
-        )
-    else:
-        if get_setting(settings, 'telegram', {}).get('enabled'):
-            print("⚠️ التليجرام: معطل (تأكد من إعداد ملف .env)")
-    
-    # 3. تشغيل الـ Workers
-    queue = asyncio.Queue()
-    stats = {'checked': 0, 'found': 0}
-    scan_paths = get_scan_paths(settings)
-    
-    workers = [
-        asyncio.create_task(
-            worker(queue, analyzer, hash_db, 
-                   get_confidence_threshold(settings), 
-                   telegram, stats, scan_paths)
-        )
-        for _ in range(get_threads(settings))
-    ]
-    
-    # 4. إضافة المصادر
-    dorking_config = get_setting(settings, 'dorking', {})
-    if dorking_config.get('enabled'):
-        print(f"🔍 تفعيل Google Dorking (Mode: {dorking_config.get('scanner_mode', 'hybrid')})")
+    while True:
+        run_count += 1
         
-        dorks = load_text_lines(f"{CONFIG_DIR}/{DORKS_FILE}")
-        api_key = get_serpapi_key()
+        if continuous_mode:
+            from datetime import datetime
+            print(f"\n{'='*60}")
+            print(f"🔄 دورة رقم #{run_count} - {datetime.now().strftime('%H:%M:%S')}")
+            print(f"{'='*60}\n")
         
-        if dorks and api_key:
-            print(f"✅ تم تحميل {len(dorks)} Dorks")
-            try:
-                dork_urls = await dork_scanner.fetch_dork_urls(
-                    dorks=dorks,
-                    api_key=api_key,
-                    count=DEFAULT_DORK_COUNT,
-                    num_results_per_dork=DEFAULT_DORK_RESULTS_PER_QUERY
-                )
-                
-                print(f"✅ نتائج Dorking: {len(dork_urls)} رابط")
-                
-                for url in dork_urls:
-                    await queue.put(url)
-            except Exception as e:
-                print(f"⚠️ خطأ في Dorking: {e}")
+        # 2. إنشاء الخدمات - دوال بسيطة!
+        hybrid_config = get_setting(settings, 'hybrid_system', {})
+        
+        analyzer = await create_analyzer(
+            html_kw, api_kw, exclude,
+            get_timeout(settings),
+            get_max_response_size(settings),
+            get_user_agent(settings),
+            hybrid_config.get('browser_service_url') if hybrid_config.get('enabled') else None,
+            hybrid_config.get('fallback_confidence_threshold', FALLBACK_CONFIDENCE_THRESHOLD),
+            settings  # إضافة proxy_config
+        )
+        
+        hash_db = await create_database(
+            get_hash_db_file(settings),
+            use_hash_db(settings)
+        )
+        
+        # Telegram
+        telegram = None
+        telegram_config = get_telegram_config(settings)
+        if telegram_config:
+            telegram = create_telegram(
+                telegram_config['bot_token'],
+                telegram_config['chat_id']
+            )
         else:
-            print("⚠️ Dorking: غير مفعل (تحقق من .env)")
-    
-    # إضافة الروابط المولدة
-    total_urls = 0
-    
-    ratio = dorking_config.get('ratio', DORKING_URL_RATIO) if dorking_config.get('enabled') else 1.0
-    generated_count = int(DEFAULT_URL_GENERATION_COUNT * ratio) if dorking_config.get('enabled') else DEFAULT_URL_GENERATION_COUNT
-    
-    generated_urls = generator.generate_urls(
-        count=generated_count,
-        domains=domains,
-        word_list=words,
-        names=names,
-        locations=locations
-    )
-    
-    for url in generated_urls:
-        await queue.put(url)
-        total_urls += 1
-    
-    print(f"🌐 إجمالي الروابط: {total_urls + queue.qsize()}\n")
-    
-    # 5. انتظار انتهاء كل المهام
-    try:
-        await queue.join()
-    except KeyboardInterrupt:
-        print("\n⏸️ توقف يدوي...")
-    finally:
-        await analyzer.close()
+            if get_setting(settings, 'telegram', {}).get('enabled'):
+                print("⚠️ التليجرام: معطل (تأكد من إعداد ملف .env)")
         
-        # Logging & Metrics
-        if logger:
-            log_success(logger, f"Scan completed: {stats['checked']} checked, {stats['found']} found")
-        print_metrics_report(logger)
+        # 3. تشغيل الـ Workers
+        queue = asyncio.Queue()
+        stats = {'checked': 0, 'found': 0}
+        scan_paths = get_scan_paths(settings)
         
-        print(f"""
+        workers = [
+            asyncio.create_task(
+                worker(queue, analyzer, hash_db, 
+                       get_confidence_threshold(settings), 
+                       telegram, stats, scan_paths)
+            )
+            for _ in range(get_threads(settings))
+        ]
+        
+        # 4. إضافة المصادر
+        dorking_config = get_setting(settings, 'dorking', {})
+        if dorking_config.get('enabled'):
+            print(f"🔍 تفعيل Google Dorking (Mode: {dorking_config.get('scanner_mode', 'hybrid')})")
+            
+            dorks = load_text_lines(f"{CONFIG_DIR}/{DORKS_FILE}")
+            api_key = get_serpapi_key()
+            
+            if dorks and api_key:
+                print(f"✅ تم تحميل {len(dorks)} Dorks")
+                try:
+                    dork_urls = await dork_scanner.fetch_dork_urls(
+                        dorks=dorks,
+                        api_key=api_key,
+                        count=DEFAULT_DORK_COUNT,
+                        num_results_per_dork=DEFAULT_DORK_RESULTS_PER_QUERY
+                    )
+                    
+                    print(f"✅ نتائج Dorking: {len(dork_urls)} رابط")
+                    
+                    for url in dork_urls:
+                        await queue.put(url)
+                except Exception as e:
+                    print(f"⚠️ خطأ في Dorking: {e}")
+            else:
+                print("⚠️ Dorking: غير مفعل (تحقق من .env)")
+        
+        # إضافة الروابط المولدة
+        total_urls = 0
+        
+        ratio = dorking_config.get('ratio', DORKING_URL_RATIO) if dorking_config.get('enabled') else 1.0
+        generated_count = int(DEFAULT_URL_GENERATION_COUNT * ratio) if dorking_config.get('enabled') else DEFAULT_URL_GENERATION_COUNT
+        
+        generated_urls = generator.generate_urls(
+            count=generated_count,
+            domains=domains,
+            word_list=words,
+            names=names,
+            locations=locations
+        )
+        
+        for url in generated_urls:
+            await queue.put(url)
+            total_urls += 1
+        
+        print(f"🌐 إجمالي الروابط: {total_urls + queue.qsize()}\n")
+        
+        # 5. انتظار انتهاء كل المهام
+        try:
+            await queue.join()
+        except KeyboardInterrupt:
+            print("\n⏸️ توقف يدوي...")
+            break
+        finally:
+            await analyzer.close()
+            
+            # Logging & Metrics
+            if logger:
+                log_success(logger, f"Scan completed: {stats['checked']} checked, {stats['found']} found")
+            print_metrics_report(logger)
+            
+            print(f"""
 ========================================
 📊 الإحصائيات النهائية
 ========================================
 • تم فحص: {stats['checked']} موقع
 • مواقع محتملة: {stats['found']}
 ========================================
-        """)
+            """)
+        
+        # 🔄 التحقق من الاستمرارية
+        if not continuous_mode:
+            break  # تشغيل مرة واحدة والخروج
+        
+        # الانتظار قبل الدورة الجديدة
+        print(f"\n⏸️  الدورة #{run_count} انتهت!")
+        print(f"   هننتظر {wait_seconds} ثانية قبل الدورة الجديدة...")
+        print(f"   اضغط Ctrl+C للإيقاف\n")
+        
+        try:
+            await asyncio.sleep(wait_seconds)
+        except KeyboardInterrupt:
+            print("\n⏹️  تم إيقاف الوضع المستمر بواسطة المستخدم")
+            break
 
 
 def main():
