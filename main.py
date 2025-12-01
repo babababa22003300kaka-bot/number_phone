@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 بوت البحث الآلي عن مصادر OTP
-الإصدار: 2.7 (With Logging + Metrics)
+الإصدار: 2.8 (With Flexible Execution Mode)
 """
 
 import asyncio
@@ -18,6 +18,18 @@ from typing import Dict
 # Phase 4: Monitoring - Step 1 & 2
 from modules.logger import setup_logger, log_info, log_success, log_error
 from modules.metrics import start_metrics, track_url_checked, track_url_found, print_metrics_report
+
+# Phase 5: Flexible Execution Mode
+from modules.execution_engine import (
+    get_execution_mode,
+    print_execution_mode_banner,
+    should_run_automator
+)
+from modules.proxy_health import (
+    check_all_proxies,
+    filter_healthy_proxies,
+    get_proxy_health_config
+)
 
 # 🔧 تهيئة طباعة Unicode على Windows
 
@@ -110,8 +122,8 @@ async def worker(queue, analyzer, hash_db, threshold, telegram, stats, scan_path
 async def main_async():
     print("""
 ========================================
-🚀 بوت البحث الآلي - v2.7
-✨ With Logging + Metrics
+🚀 بوت البحث الآلي - v2.8
+✨ Flexible Execution Mode
 ========================================
     """)
     
@@ -124,10 +136,37 @@ async def main_async():
     logger = None
     if logging_config.get('enabled', False):
         logger = setup_logger(level="INFO", console=True)
-        log_info(logger, "Bot started - v2.7 with logging and metrics")
+        log_info(logger, "Bot started - v2.8 with flexible execution mode")
     
     # Step 2: Start Metrics
     start_metrics()
+    
+    # 🎯 Phase 5: Execution Mode Display
+    execution_mode = get_execution_mode(settings)
+    print_execution_mode_banner(execution_mode, settings)
+    
+    # 🌐 Proxy Health Check (if enabled)
+    proxy_config = settings.get('proxy', {})
+    health_config = get_proxy_health_config(settings)
+    
+    if proxy_config.get('enabled') and health_config.get('enabled'):
+        print("\n🔍 Proxy Health Check...")
+        from modules.proxy_manager import get_proxy_list
+        
+        proxy_list = get_proxy_list(settings)
+        if proxy_list:
+            results = check_all_proxies(
+                proxy_list,
+                test_url=health_config.get('test_url', 'http://httpbin.org/ip'),
+                timeout=health_config.get('timeout', 5),
+                verbose=True
+            )
+            healthy_proxies = filter_healthy_proxies(results)
+            
+            if len(healthy_proxies) < len(proxy_list):
+                print(f"⚠️  {len(proxy_list) - len(healthy_proxies)} proxies failed health check")
+        else:
+            print("⚠️  No proxies found in proxy list")
     
     # تحميل الملفات
     domains = load_text_lines(f"{CONFIG_DIR}/{DOMAINS_FILE}")
@@ -142,9 +181,9 @@ async def main_async():
         print("❌ لازم تضيف دومينات في domains.txt!")
         sys.exit(1)
     
-    print(f"✅ تم تحميل: {len(domains)} دومين")
+    print(f"\n✅ تم تحميل: {len(domains)} دومين")
     print(f"✅ القوائم: {len(words)} كلمات | {len(names)} أسماء | {len(locations)} مواقع")
-    print(f"⚡ السرعة: {get_threads(settings)} Workers (AsyncIO)")
+    print(f"⚡ السرعة: {get_threads(settings)} Workers (AsyncIO)\n")
     
     # 2. إنشاء الخدمات - دوال بسيطة!
     hybrid_config = get_setting(settings, 'hybrid_system', {})
@@ -235,7 +274,7 @@ async def main_async():
         await queue.put(url)
         total_urls += 1
     
-    print(f"🌐 إجمالي الروابط: {total_urls + queue.qsize()}")
+    print(f"🌐 إجمالي الروابط: {total_urls + queue.qsize()}\n")
     
     # 5. انتظار انتهاء كل المهام
     try:

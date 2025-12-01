@@ -34,16 +34,38 @@
   "confidence_threshold": 60,
   "use_hash_db": true,
   "hash_db_file": "checked_urls.db",
+  "logging": {
+    "enabled": false
+  },
+  "execution": {
+    "mode": "auto",
+    "http_first": true,
+    "run_automator_on_found": true,
+    "browser": {
+      "headless": true,
+      "per_context_rotation": false,
+      "timeout": 30000
+    },
+    "fallback": {
+      "on_js_detected": true,
+      "on_cloudflare": true,
+      "on_low_confidence": false,
+      "confidence_threshold": 30
+    }
+  },
   "proxy": {
     "enabled": true,
     "list_file": "config/proxies.txt",
     "rotate": true,
     "use_in_httpx": false,
     "use_in_playwright": false,
-    "retry_without_proxy_on_error": true
-  },
-  "logging": {
-    "enabled": false
+    "retry_without_proxy_on_error": true,
+    "health_check": {
+      "enabled": false,
+      "test_url": "http://httpbin.org/ip",
+      "timeout": 5,
+      "check_on_startup": true
+    }
   },
   "name_generation": {
     "library": "names",
