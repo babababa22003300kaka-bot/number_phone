@@ -1,5 +1,5 @@
 {
-  "threads": 5,
+  "threads": 15,
   "timeout": 10,
   "max_retries": 2,
   "max_response_size": 3145728,
@@ -33,12 +33,13 @@
   },
   "confidence_threshold": 60,
   "use_hash_db": true,
-  "hash_db_file": "checked_urls.db",
+  "hash_db_file": "database/checked_urls.db",
   "logging": {
     "enabled": false
   },
   "execution": {
-    "mode": "auto",
+    "mode": "http",
+    "_available_modes": "auto, http, browser",
     "http_first": true,
     "continuous_mode": true,
     "continuous_wait_seconds": 1,
@@ -70,28 +71,12 @@
     }
   },
   "name_generation": {
-    "library": "names",
+    "library": "hybrid",
     "locale": "en",
-    "separator": "_",
+    "separator": "",
     "username_regex": "^[a-z0-9._]+$",
     "ensure_unique": false,
-    "fallback_first_names": [
-      "ahmed",
-      "mohamed",
-      "sara",
-      "fatima",
-      "ali",
-      "omar",
-      "layla",
-      "youssef"
-    ],
-    "fallback_last_names": [
-      "hassan",
-      "ibrahim",
-      "mahmoud",
-      "salem",
-      "rashid",
-      "khalil"
-    ]
+    "min_random_length": 3,
+    "max_random_length": 63
   }
 }

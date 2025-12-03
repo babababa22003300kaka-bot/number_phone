@@ -35,8 +35,8 @@ def _sanitize_username(name: str, config: Dict) -> str:
     # Convert to lowercase
     name = name.lower()
     
-    # Replace spaces with separator
-    name = name.replace(' ', separator)
+    # Remove spaces (no separator!)
+    name = name.replace(' ', '')  # ← دمج بدون فاصل!
     
     # Remove invalid characters (keep only a-z, 0-9, ., _)
     name = re.sub(r'[^a-z0-9._]', '', name)
@@ -50,67 +50,74 @@ def generate_fake_name(config: Optional[Dict] = None) -> str:
     
     Args:
         config: dict with keys:
-            - library: "names" | "faker" (default: "names")
+            - library: "names" | "faker" | "hybrid" (default: "hybrid")
             - locale: "en" | "ar" (default: "en")
             - separator: "_" | "." (default: "_")
             - username_regex: regex pattern (default: "^[a-z0-9._]+$")
             - fallback_first_names: list
             - fallback_last_names: list
+            - min_random_length: int (default: 3)
+            - max_random_length: int (default: 63)
     
     Returns:
-        str: sanitized username (format: firstname_lastname##)
+        str: sanitized username (بدون أرقام!)
     """
+    import string
+    
     # Default config if none provided
     if config is None:
         config = {
-            'library': 'names',
+            'library': 'hybrid',
             'locale': 'en',
             'separator': '_',
             'username_regex': '^[a-z0-9._]+$',
             'fallback_first_names': ['ahmed', 'mohamed', 'sara', 'fatima', 'ali', 'omar'],
-            'fallback_last_names': ['hassan', 'ibrahim', 'mahmoud', 'salem', 'rashid']
+            'fallback_last_names': ['hassan', 'ibrahim', 'mahmoud', 'salem', 'rashid'],
+            'min_random_length': 3,
+            'max_random_length': 63
         }
     
-    library = config.get('library', 'names')
+    library = config.get('library', 'hybrid')
     locale = config.get('locale', 'en')
+    min_len = config.get('min_random_length', 3)
+    max_len = config.get('max_random_length', 63)
     
-    # Generate names using library
-    try:
-        if library == 'names':
-            # names library doesn't support locale, use fallback for non-en
-            if locale != 'en':
-                first = random.choice(config.get('fallback_first_names', ['user']))
-                last = random.choice(config.get('fallback_last_names', ['name']))
-            else:
-                first = names.get_first_name()
-                last = names.get_last_name()
-        elif library == 'faker':
-            # faker support (future enhancement)
-            try:
-                from faker import Faker
-                fake = Faker(locale)
-                full_name = fake.name()
-                parts = full_name.split()
-                first, last = parts[0], parts[-1]
-            except ImportError:
-                # Fallback if faker not installed
-                first = random.choice(config.get('fallback_first_names', ['user']))
-                last = random.choice(config.get('fallback_last_names', ['name']))
+    # 🎲 Hybrid Mode: 50% names library, 50% random letters
+    if library == 'hybrid':
+        use_library = random.choice([True, False])
+        if use_library:
+            library = 'names'
         else:
-            # Unknown library, use fallback
-            first = random.choice(config.get('fallback_first_names', ['user']))
-            last = random.choice(config.get('fallback_last_names', ['name']))
-    except Exception:
-        # Any error, use fallback
-        first = random.choice(config.get('fallback_first_names', ['user']))
-        last = random.choice(config.get('fallback_last_names', ['name']))
+            library = 'random'
     
-    # Add numeric suffix
-    num = random.randint(10, 99)
-    raw_name = f"{first}_{last}{num}"
+    # Generate names using selected method
+    try:
+        if library == 'random':
+            # ✨ توليد حروف عشوائية فقط (بدون أرقام!)
+            length = random.randint(min_len, max_len)
+            letters = string.ascii_lowercase
+            raw_name = ''.join(random.choice(letters) for _ in range(length))
+            return _sanitize_username(raw_name, config)
+        
+        else:
+            # ✅ استخدام names library دايماً (بدون fallback!)
+            first = names.get_first_name()
+            last = names.get_last_name()
+    
+    except Exception as e:
+        # في حالة الخطأ → random letters
+        length = random.randint(min_len, max_len)
+        letters = string.ascii_lowercase
+        raw_name = ''.join(random.choice(letters) for _ in range(length))
+        return _sanitize_username(raw_name, config)
+    
+    # ⚠️ بدون أرقام! بدون underscore!
+    # Combine first + last (no separator)
+    raw_name = f"{first}{last}"  # ← دمج مباشر!
     
     # Sanitize and return
     return _sanitize_username(raw_name, config)
+
 
 def generate_fake_email() -> str:
     """

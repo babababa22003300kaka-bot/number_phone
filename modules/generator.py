@@ -40,16 +40,16 @@ def is_valid_label(label: str) -> bool:
 # 2. دوال مساعدة (Helper Functions)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _generate_random_number(min_length=1, max_length=4) -> str:
+def _generate_random_letters(min_length=3, max_length=60) -> str:
     """
-    توليد سلسلة أرقام عشوائية بطول متغير
+    توليد حروف عشوائية بدون أرقام
     
-    التحديث الجديد: ✅
-    - بدل رقم واحد (123)، بنولد سلسلة (1234)
-    - الطول من 1 إلى 4 أرقام
+    التحديث: ✅
+    - حروف فقط a-z (بدون أرقام!)
+    - الطول من 3 إلى 60 حرف
     """
     length = random.randint(min_length, max_length)
-    return ''.join(random.choice('0123456789') for _ in range(length))
+    return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 3. دوال الأنماط (Pattern Functions)
@@ -74,17 +74,17 @@ def _pattern_word_hyphen_word(word_list: List[str]) -> str:
     w2 = random.choice(word_list)
     return f"{w1}-{w2}".lower()
 
-def _pattern_word_number(word_list: List[str]) -> str:
-    """نمط: كلمة + أرقام (محدث ✅)"""
-    if not word_list: return "site123"
+def _pattern_word_letters(word_list: List[str]) -> str:
+    """نمط: كلمة + حروف عشوائية (بدون أرقام!)"""
+    if not word_list: return "siteabc"
     word = random.choice(word_list)
-    num = _generate_random_number()
-    return f"{word}{num}".lower()
+    letters = _generate_random_letters(2, 8)  # حروف قصيرة
+    return f"{word}{letters}".lower()
 
 def _pattern_pure_random(word_list: List[str] = None) -> str:
-    """نمط: حروف وأرقام عشوائية تماماً"""
-    length = random.randint(4, 10)
-    chars = string.ascii_lowercase + string.digits
+    """نمط: حروف عشوائية فقط (بدون أرقام!)"""
+    length = random.randint(3, 60)  # 3-60 حرف
+    chars = string.ascii_lowercase  # حروف فقط!
     return ''.join(random.choice(chars) for _ in range(length))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -107,22 +107,22 @@ def _pattern_word_name(words: List[str], names: List[str]) -> str:
     name = random.choice(names).lower()
     return f"{word}-{name}"
 
-def _pattern_name_number(names: List[str]) -> str:
-    """نمط جديد: اسم + أرقام (مثال: ahmed1234)"""
+def _pattern_name_letters(names: List[str]) -> str:
+    """نمط جديد: اسم + حروف (مثال: ahmedxyz)"""
     if not names:
-        return "user123"
+        return "userabc"
     name = random.choice(names).lower()
-    num = _generate_random_number()
-    return f"{name}{num}"
+    letters = _generate_random_letters(2, 8)
+    return f"{name}{letters}"
 
-def _pattern_word_name_number(words: List[str], names: List[str]) -> str:
-    """نمط جديد: كلمة-اسم-رقم (مثال: login-ahmed-123)"""
+def _pattern_word_name_letters(words: List[str], names: List[str]) -> str:
+    """نمط جديد: كلمة-اسم-حروف (مثال: login-ahmed-xyz)"""
     if not words or not names:
-        return "service-user-123"
+        return "service-user-abc"
     word = random.choice(words).lower()
     name = random.choice(names).lower()
-    num = _generate_random_number()
-    return f"{word}-{name}-{num}"
+    letters = _generate_random_letters(2, 6)
+    return f"{word}-{name}-{letters}"
 
 def _pattern_location_word(locations: List[str], words: List[str]) -> str:
     """نمط جديد: مدينة-كلمة (مثال: cairo-shop)"""
@@ -162,20 +162,20 @@ def generate_urls(
     names = names or word_list
     locations = locations or word_list
     
-    # قائمة الأنماط المتاحة (القديمة + الجديدة)
+    # قائمة الأنماط المتاحة (بدون أرقام! ✅)
     patterns = [
-        # الأنماط القديمة (محدثة ✅)
+        # أنماط الكلمات
         lambda: _pattern_single_word(word_list),
         lambda: _pattern_word_combo(word_list),
         lambda: _pattern_word_hyphen_word(word_list),
-        lambda: _pattern_word_number(word_list),
-        lambda: _pattern_pure_random(),
+        lambda: _pattern_word_letters(word_list),  # ← حروف بدل أرقام
+        lambda: _pattern_pure_random(),  # ← حروف عشوائية 3-60
         
-        # الأنماط الجديدة ✨
+        # أنماط الأسماء والمواقع
         lambda: _pattern_name_location(names, locations),
         lambda: _pattern_word_name(word_list, names),
-        lambda: _pattern_name_number(names),
-        lambda: _pattern_word_name_number(word_list, names),
+        lambda: _pattern_name_letters(names),  # ← حروف بدل أرقام
+        lambda: _pattern_word_name_letters(word_list, names),  # ← حروف
         lambda: _pattern_location_word(locations, word_list),
     ]
     

@@ -31,6 +31,12 @@ async def init_database(db_path: str = "checked_urls.db"):
     global _db_pool
     _db_pool = {'path': db_path}
     
+    # ✅ إنشاء المجلد تلقائياً إذا لم يكن موجوداً
+    import os
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+    
     async with aiosqlite.connect(db_path) as conn:
         # الجدول الرئيسي (محسّن)
         await conn.execute("""
